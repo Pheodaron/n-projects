@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
 	"net/url"
@@ -19,9 +20,8 @@ func main() {
 	if flag.NArg() != 0 {
 		log.Fatal("unexpected arguments; use --help for available options")
 	}
-	endpoint, err := url.Parse(*backendURL)
-	if err != nil || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
-		log.Fatal("--backend-url must be an HTTP(S) URL without credentials, query or fragment")
+	if err := validateBackendURL(*backendURL); err != nil {
+		log.Fatal(err)
 	}
 	if strings.TrimSpace(*token) == "" {
 		log.Fatal("--token must not be empty")
@@ -35,4 +35,12 @@ func main() {
 	if e := app.Run(); e != nil {
 		log.Fatal(e)
 	}
+}
+
+func validateBackendURL(rawURL string) error {
+	endpoint, err := url.Parse(rawURL)
+	if err != nil || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+		return errors.New("--backend-url must be an HTTP(S) URL without credentials, query or fragment")
+	}
+	return nil
 }
