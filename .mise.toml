@@ -11,35 +11,22 @@ protoc = "32.1"
 _.file = ".env"
 
 [tasks.generate]
-run = "protoc --proto_path=proto --go_out=gen/go --go_opt=paths=source_relative --connect-go_out=gen/go --connect-go_opt=paths=source_relative proto/nprojects/v1/core.proto"
-[tasks."proto:check"]
-depends = ["generate"]
-run = "git diff --exit-code -- gen/go"
-[tasks.infra]
-run = "docker compose -f deploy/compose.yaml up -d --wait"
-[tasks.migrate]
-env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
-run = 'goose -dir migrations up'
-[tasks."dev:server"]
-run = "go run ./cmd/server"
-[tasks."dev:desktop"]
-depends = ["build:frontend"]
-run = "go run ./cmd/desktop"
-[tasks."dev:llama"]
-run = "python3 scripts/llama.py"
-[tasks."build:frontend"]
-run = "pnpm --dir frontend install --frozen-lockfile && pnpm --dir frontend build"
-[tasks.build]
-depends = ["build:frontend"]
-run = "mkdir -p bin && go build -o bin/server ./cmd/server && go build -o bin/desktop ./cmd/desktop"
+run = """
+protoc \
+    --proto_path=proto \
+    --go_out=gen/go \
+    --go_opt=paths=source_relative \
+    --connect-go_out=gen/go \
+    --connect-go_opt=paths=source_relative proto/nprojects/v1/core.proto
+"""
+
+[tasks."compose:up"]
+run = "docker compose --env-file .env -f deploy/compose.yaml up -d --wait"
+
 [tasks.test]
 run = "go test -race ./internal/... ./migrations"
 [tasks.fmt]
 run = "gofmt -w cmd internal migrations frontend/embed.go"
-[tasks.doctor]
-run = "python3 scripts/doctor.py"
-[tasks.dev]
-run = "python3 scripts/dev.py"
 
 [tasks."migrate:status"]
 env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
@@ -47,3 +34,7 @@ run = 'goose -dir migrations status'
 [tasks."migrate:down"]
 env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
 run = 'goose -dir migrations down'
+
+[tasks.migrate]
+env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
+run = 'goose -dir migrations up'

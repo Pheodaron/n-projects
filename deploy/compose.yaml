@@ -1,12 +1,44 @@
+name: n-projects
+
 services:
+  backend:
+    image: ${APP_IMAGE:-n-projects:local}
+    environment:
+      SERVER_ADDR: 0.0.0.0:8080
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      DEV_TOKEN: ${DEV_TOKEN:?Set DEV_TOKEN}
+      LLAMA_BASE_URL: ${LLAMA_BASE_URL:?Set LLAMA_BASE_URL}
+      LLAMA_MODEL: ${LLAMA_MODEL:?Set LLAMA_MODEL}
+      LLAMA_API_KEY: ${LLAMA_API_KEY:-}
+    ports:
+      - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  migrate:
+    image: ${APP_IMAGE:-n-projects:local}
+    entrypoint: ["/goose"]
+    command: ["-dir", "/migrations", "up"]
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: ${DATABASE_URL:?Set DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   postgres:
     image: postgres:17.6
     environment:
       POSTGRES_USER: nprojects
-      POSTGRES_PASSWORD: dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       POSTGRES_DB: nprojects
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres:/var/lib/postgresql/data
     healthcheck:
@@ -14,5 +46,7 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+    restart: unless-stopped
+
 volumes:
   postgres:

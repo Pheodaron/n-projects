@@ -401,15 +401,15 @@ Mise — единая точка входа для разработчика и C
 | Команда | Назначение |
 |---|---|
 | `mise install` | Установка закреплённых инструментов |
-| `mise run doctor` | Версии, нативные Wails-зависимости, capability checks конвертеров |
-| `mise run infra` | PostgreSQL+pgvector и S3-compatible dev storage |
+| `docker build -t n-projects:local .` | Отдельная сборка backend-образа |
+| `mise run compose:up` | Запуск backend, Goose и PostgreSQL из готовых образов |
 | `mise run migrate` | Goose: явное применение SQL из migrations/ |
 | `mise run generate` / `proto:check` | protoc codegen и проверка воспроизводимости generated-кода |
-| `mise run dev:server` / `dev:worker` / `dev:desktop` | Запуск компонентов |
+| `docker compose --env-file .env -f deploy/compose.yaml down` | Остановка контейнеров с сохранением данных |
 | `mise run fmt` / `lint` / `test` | Форматирование и согласованные проверки |
-| `mise run build` / `build:desktop` | Сборка backend и desktop |
+| Wails desktop | Отдельный нативный клиент, подключаемый к backend |
 
-Taskfile не нужен вторым обязательным слоем. Если он понадобится для существующей автоматизации, mise остаётся внешней точкой входа. Для Linux WebKitGTK и других OS SDK, которые нельзя поставить обычным mise backend, `mise run doctor/setup` проверяет и координирует установку штатным пакетным менеджером; ограничения mise не скрываются.
+Taskfile не нужен вторым обязательным слоем. Если он понадобится для существующей автоматизации, mise остаётся внешней точкой входа. Для Linux WebKitGTK и других OS SDK, которые нельзя поставить обычным mise backend, используется штатный пакетный менеджер ОС для сборки отдельного desktop-клиента; ограничения mise не скрываются.
 
 Dev-инфраструктура — Docker Compose. В Core запускаются backend, PostgreSQL, llama-server и desktop; inference может быть внешним процессом. На этапе 6 добавляются `ingest-worker` и object storage, а полный набор команд выше отражает целевой состав. У production ingestion worker свои лимиты и сетевой профиль. Desktop собирается в CI на целевых ОС, подписывается и получает совместимый API endpoint; набор ОС и механизм обновления ещё нужно выбрать.
 
@@ -509,3 +509,5 @@ Dev-инфраструктура — Docker Compose. В Core запускают�
 12. [Google DeepMind Gemma: варианты checkpoints](https://github.com/google-deepmind/gemma/blob/9e1f74131ba9d45e5fe6ae7bb3941d9f2abb39c3/gemma/gm/ckpts/_paths.py).
 
 Миграции БД выполняются Goose из `migrations/` отдельной mise-задачей. Генерация ConnectRPC выполняется `protoc`, установленным через mise; Buf не используется.
+
+Backend во всех режимах запускается в контейнере через Compose. Образ собирается отдельной командой Dockerfile; `build` в Compose отсутствует. Goose выполняется отдельным одноразовым сервисом до старта backend. Wails остаётся отдельным клиентом. Локальные dev/build-задачи и scripts удалены.

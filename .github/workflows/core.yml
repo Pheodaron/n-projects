@@ -3,15 +3,6 @@ on: [push, pull_request]
 jobs:
   core:
     runs-on: ubuntu-24.04
-    services:
-      postgres:
-        image: postgres:17.6
-        env:
-          POSTGRES_USER: nprojects
-          POSTGRES_PASSWORD: dev
-          POSTGRES_DB: nprojects
-        ports: ["5432:5432"]
-        options: --health-cmd "pg_isready -U nprojects" --health-interval 2s --health-retries 30
     env:
       TEST_DATABASE_URL: postgres://nprojects:dev@127.0.0.1:5432/nprojects?sslmode=disable
     steps:
@@ -21,11 +12,25 @@ jobs:
         with:
           version: '2026.11.3'
       - name: Verify generated RPC contract
-        run: mise run proto:check
-      - name: Apply Goose migrations
-        run: mise run migrate
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev
-      - run: mise run build:frontend
+        run: mise run generate && git diff --exit-code -- gen/go
+      - name: Build backend image
+        run: docker build -t n-projects:local .
+      - name: Start backend, Goose and PostgreSQL
+        run: mise run compose:up
+      - name: Verify container health
+        run: curl --fail --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/healthz
       - run: mise run test
       - run: mise exec -- go vet ./internal/... ./cmd/server
-      - run: mise run build
+      - name: Build standalone desktop client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev
+          pnpm --dir frontend install --frozen-lockfile
+          pnpm --dir frontend build
+          go build -o /tmp/n-projects-desktop ./cmd/desktop
+      - name: Compose logs
+        if: failure()
+        run: docker compose --env-file .env -f deploy/compose.yaml logs
+      - name: Stop containers
+        if: always()
+        run: docker compose --env-file .env -f deploy/compose.yaml down --volumes

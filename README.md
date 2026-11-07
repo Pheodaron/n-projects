@@ -1,80 +1,88 @@
 # n-projects — Core
 
-Go backend + Wails desktop + ConnectRPC + Eino `TurnLoop` / `ChatModelAgent` + llama.cpp. Чаты и сообщения сохраняются в PostgreSQL. Это первый этап: текстовый диалог, история, потоковый ответ, Stop и восстановление UI после переподключения.
+Backend Go с ConnectRPC, Eino TurnLoop + ChatModelAgent и PostgreSQL. Backend и БД запускаются через Docker Compose одинаково для разработки и production. Wails — отдельный desktop-клиент.
 
 ## Подготовка
 
-Установите [mise](https://mise.jdx.dev), Docker с Compose и нативные зависимости Wails. Для Linux (Debian/Ubuntu): `build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev`. macOS требует Xcode Command Line Tools; Windows — WebView2. Python 3 используется для локальных launchers.
+Нужны Docker с Compose и [mise](https://mise.jdx.dev). Для генерации кода и тестов инструменты закреплены в `.mise.toml`.
 
 ```sh
+cp .env.example .env
 mise trust
 mise install
-cp .env.example .env
 ```
 
-Задайте собственный `DEV_TOKEN`. Desktop хранит его в Go-слое и передаёт в Connect metadata. Core использует одного dev-пользователя и один workspace. Удалённый сервер запускайте за TLS proxy; локальная конфигурация слушает loopback.
+В `.env` задайте `DEV_TOKEN`, `POSTGRES_PASSWORD`, `DATABASE_URL`, `LLAMA_BASE_URL`, `LLAMA_MODEL` и при необходимости `LLAMA_API_KEY`. В DATABASE_URL имя сервиса БД — `postgres`; пароль должен соответствовать POSTGRES_PASSWORD. Для production задайте собственные значения и разместите endpoint за TLS proxy.
 
-## Подключение к готовому llama.cpp
+llama.cpp — уже работающий внешний сервис. Его адрес должен быть доступен из контейнера: `localhost` внутри контейнера указывает на сам контейнер. Веса модели и inference-сервер в образ не входят.
 
-Основной сценарий — уже работающий внешний llama-server. Задайте в `.env`:
+## Сборка образа
 
-```dotenv
-LLAMA_BASE_URL=http://your-inference-host:8081/v1
-LLAMA_MODEL=your-model-id
-LLAMA_API_KEY=
+Из корня репозитория:
+
+```sh
+docker build -t n-projects:local .
 ```
 
-`LLAMA_MODEL` должен совпадать с ID из `/v1/models`. `LLAMA_API_KEY` нужен только если сервис требует авторизацию. Установка llama.cpp и загрузка весов не входят в обязательный запуск. Backend обращается к модели через OpenAI-compatible API; desktop обращается только к backend через generated Connect-клиент.
-
-Опционально можно использовать собственный локальный `llama-server`: задайте `LLAMA_SERVER` и `LLAMA_MODEL_FILE`, затем `mise run dev:llama`. Если путь к модели не задан, `mise run dev` подключается к внешнему endpoint.
+Dockerfile имеет builder-стадию Go и минимальный runtime `scratch`. Runtime содержит backend, Goose, SQL-миграции и CA-сертификаты. Выполнение идёт от непривилегированного UID. Frontend, Wails, Go toolchain и исходный код в runtime не попадают. Goose собирается только с PostgreSQL-драйвером.
 
 ## Запуск
 
+Отдельно от сборки:
+
+```sh
+mise run compose:up
+```
+
+Эквивалент:
+
+```sh
+docker compose --env-file .env -f deploy/compose.yaml up -d --wait
+```
+
+Порядок старта: здоровый PostgreSQL → одноразовый контейнер Goose → backend. Backend и migrate используют один предварительно собранный образ. В Compose нет `build` и монтирования исходников. После изменения кода повторите отдельную команду сборки и затем команду запуска.
+
+Для registry-образа укажите `APP_IMAGE=registry.example/n-projects:version` в `.env`, выполните `docker compose --env-file .env -f deploy/compose.yaml pull`, затем запустите Compose.
+
+Порты backend и PostgreSQL по умолчанию опубликованы только на loopback хоста. История сохраняется в volume PostgreSQL. Остановка с сохранением данных:
+
+```sh
+docker compose --env-file .env -f deploy/compose.yaml down
+```
+
+`/healthz` проверяет backend, `/readyz` дополнительно проверяет доступность выбранной модели. Ошибка внешнего inference не отменяет сохранность чатов.
+
+## Миграции
+
+SQL находится в `migrations/`. Compose выполняет `up` автоматически через отдельный контейнер; сервер не создаёт таблицы.
+
+```sh
+docker compose --env-file .env -f deploy/compose.yaml run --rm migrate -dir /migrations status
+docker compose --env-file .env -f deploy/compose.yaml run --rm migrate -dir /migrations down
+```
+
+Откат первой миграции удаляет Core-таблицы. Первая миграция сохраняет данные установок, созданных до внедрения Goose. Для операторского запуска Goose с хоста сохранены mise-задачи `migrate`, `migrate:status`, `migrate:down`; в этом случае DATABASE_URL должен указывать на опубликованный порт хоста, например `127.0.0.1:5432`.
+
+## Desktop-клиент
+
+Wails запускается отдельно на компьютере пользователя и обращается к backend через generated Go Connect-клиент. Для готового desktop-бинарника задайте `BACKEND_URL` и `DEV_TOKEN` в окружении процесса. Backend URL по умолчанию — `http://127.0.0.1:8080`.
+
+Нативные зависимости для сборки клиента: на Linux — `build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev`, на macOS — Xcode Command Line Tools, на Windows — WebView2. Локальные задачи запуска и сборки desktop удалены из mise; CI отдельно проверяет компиляцию клиента.
+
+## Контракт и тесты
+
 ```sh
 mise run generate
-mise run dev
-```
-
-`dev` поднимает PostgreSQL, локальный llama-server при указанном файле, backend и desktop, ждёт readiness и завершает созданные процессы при выходе. Docker volume с историей остаётся. Компоненты можно запускать отдельно:
-
-```sh
-mise run infra
-mise run migrate
-mise run dev:server
-mise run dev:desktop
-```
-
-Для подключения desktop к отдельному серверу задайте `BACKEND_URL` и тот же dev token. `/healthz` проверяет backend, `/readyz` дополнительно проверяет доступность выбранной модели.
-
-## Использование
-
-Миграции применяются явно: `mise run migrate` вызывает Goose для SQL из `migrations/`. Сервер не создаёт таблицы. `mise run dev` применяет миграции перед запуском backend. Статус: `mise run migrate:status`; откат последней миграции: `mise run migrate:down` (удаляет данные начальной схемы). Существующие таблицы Core сохраняются первой миграцией.
-
-Создайте чат, отправьте сообщение и дождитесь потокового ответа. Enter отправляет, Shift+Enter добавляет строку. Stop отменяет генерацию; закрытие окна/подписки её не отменяет. Чаты можно переименовывать и удалять после завершения активного run.
-
-Каждый принятый run выполняется через настоящий Eino TurnLoop с ChatModelAgent. В Core loop ограничен одним ходом, после чего завершается. Следующий запрос получает историю из БД. Один слот генерации и один активный run на чат; очередь, checkpoints и resume относятся к следующему этапу. При перезапуске backend незавершённые runs отмечаются `interrupted`, сохраняют доступный текст и освобождают чат. Второй backend на той же БД отклоняется advisory lock.
-
-SSE используется внутри адаптера llama.cpp. Собственный API — ConnectRPC: unary-команды и server-streaming `WatchRun`. Поток передаёт полные snapshots с revision; reconnect повторно получает актуальный snapshot. Изменяющие запросы имеют `request_id` для защиты от сетевых дублей.
-
-Core хранит сессии/историю и run snapshots в PostgreSQL JSONB, а результаты идемпотентных команд — в receipts. Это сохраняет согласованность одним коротким SQL transaction и не требует отдельной event bus. История ограничивается последними завершёнными ходами; UI показывает, если старая часть не вошла в контекст.
-
-## Проверки и сборка
-
-```sh
-mise run proto:check
-mise run generate
-mise run test
-mise run build
-```
-
-Интеграционная проверка PostgreSQL запускается явно:
-
-```sh
+mise run fmt
 TEST_DATABASE_URL=postgres://nprojects:dev@127.0.0.1:5432/nprojects?sslmode=disable mise run test
 ```
 
-Тест создаёт отдельную схему и удаляет её после завершения; использует настоящий PostgreSQL, Connect-клиент и Eino TurnLoop с управляемым HTTP model fixture. Он проверяет streaming, историю, владение, идемпотентность и CRUD. Такая проверка не подтверждает совместимость произвольного GGUF. Приёмка конкретной модели требует реального llama-server: первый ответ, второй ход с контекстом, Stop и успешный следующий ответ.
+`generate` вызывает установленный через mise protoc и закреплённые Go/Connect plugins. Generated-код включён в Git. Тесты используют отдельные схемы PostgreSQL и проверяют streaming через Eino/Connect, историю, идемпотентность, отмену, восстановление run и Goose Up/Down. Проверка конкретной модели выполняется на вашем внешнем endpoint.
 
-Go bindings используют закреплённый Wails fork commit `1d1c0c36d0bc`; frontend runtime соответствует его версии `3.1.0-nightly.20261028`. Сгенерированные Protobuf/Connect-файлы и pnpm lockfile включены в Git. `protoc` и оба Go plugins установлены через mise; `mise run generate` вызывает protoc напрямую. `mise run proto:check` проверяет отсутствие расхождений generated-кода с коммитом.
+## Поведение Core
 
-Архитектура: [ARCHITECTURE.md](ARCHITECTURE.md). Порядок последующих работ: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), этапы 1 → 4 → 5 → 3 → 2 и далее.
+Чаты создаются, переименовываются и удаляются после завершения активного run. Enter отправляет сообщение, Shift+Enter добавляет строку. Stop отменяет генерацию; отключение desktop/stream не отменяет серверный run. Следующее подключение получает актуальный snapshot с revision.
+
+Каждый run получает ограниченный TurnLoop с ChatModelAgent и историей из PostgreSQL. Один слот генерации, один активный run на чат. После рестарта незавершённые runs становятся `interrupted`, частичный текст сохраняется. Checkpoints, субагенты и OIDC относятся к следующим этапам.
+
+Архитектура: [ARCHITECTURE.md](ARCHITECTURE.md). План: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
