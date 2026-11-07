@@ -12,8 +12,6 @@ mise trust
 mise install
 ```
 
-Полный справочник параметров, обязательность, значения по умолчанию и правила обновления: [Переменные окружения](docs/ENVIRONMENT.md).
-
 В `.env` задайте `DEV_TOKEN`, `POSTGRES_PASSWORD`, `DATABASE_URL`, `BACKEND_DATABASE_URL`, `LLAMA_BASE_URL`, `LLAMA_MODEL` и при необходимости `LLAMA_API_KEY`. `DATABASE_URL` используется Goose с хоста (`127.0.0.1:5432`), `BACKEND_DATABASE_URL` — сервером внутри Compose (`postgres:5432`). Обе строки указывают на одну базу; пароль должен соответствовать POSTGRES_PASSWORD. Для production задайте собственные значения и разместите endpoint за TLS proxy.
 
 llama.cpp — уже работающий внешний сервис. Его адрес должен быть доступен из контейнера: `localhost` внутри контейнера указывает на сам контейнер. Веса модели и inference-сервер в образ не входят.
