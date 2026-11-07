@@ -79,7 +79,32 @@ Wails запускается отдельно на компьютере поль
 
 Токен клиента должен совпадать с настроенным на backend. Серверные параметры остаются в `.env.example`.
 
-Нативные зависимости для сборки клиента: на Linux — `build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev`, на macOS — Xcode Command Line Tools, на Windows — WebView2. Локальные задачи запуска и сборки desktop удалены из mise; CI отдельно проверяет компиляцию клиента.
+### Сборка бинарников в контейнере
+
+Нужен Docker с BuildKit. Go, Node и нативные build-зависимости устанавливаются внутри `Dockerfile.desktop`. Основной `Dockerfile` backend не изменяется. Сборка рассчитана на **amd64 (x86_64)**; на ARM-хосте требуется эмуляция linux/amd64, например встроенная в Docker Desktop.
+
+Из корня проекта:
+
+```sh
+mise run build:desktop:linux
+mise run build:desktop:windows
+```
+
+Эквивалентные Docker-команды:
+
+```sh
+docker build --platform linux/amd64 -f Dockerfile.desktop --target linux-export --output type=local,dest=dist/linux-amd64 .
+docker build --platform linux/amd64 -f Dockerfile.desktop --target windows-export --output type=local,dest=dist/windows-amd64 .
+```
+
+Готовые файлы для распространения:
+
+- `dist/linux-amd64/n-projects` — Linux amd64, собирается на Ubuntu 24.04 (glibc 2.39). На машине пользователя нужны GTK4 и WebKitGTK 6.0. Для Ubuntu 24.04: `sudo apt-get install libgtk-4-1 libwebkitgtk-6.0-4`. Совместимость с более старыми дистрибутивами не гарантируется.
+- `dist/windows-amd64/n-projects.exe` — Windows amd64 с установленным Microsoft Edge WebView2 Runtime. Собирается с GUI subsystem, без отдельного окна консоли.
+
+Frontend собирается в контейнере и встраивается в executable через `go:embed`. Папку frontend, Go, Node, контейнер и `.env` конечному пользователю передавать не нужно. Бинарник не включает backend, базу данных и модель; он подключается к работающему серверу через `--backend-url`. Параметр `--token` меняет токен при необходимости. Ключи и `.env` исключены из build context.
+
+В GitHub Actions отдельная задача **Desktop binaries** собирает оба варианта тем же Dockerfile и сохраняет их как артефакты `desktop-linux-amd64` и `desktop-windows-amd64` на странице запуска CI. Бинарники можно скачать оттуда и передать пользователям. После распаковки Linux-артефакта из CI восстановите право запуска: `chmod +x n-projects`. Публикация GitHub Release и цифровая подпись не выполняются автоматически.
 
 ## Контракт и тесты
 

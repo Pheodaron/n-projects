@@ -21,3 +21,4 @@ __pycache__/
 
 frontend/dist/*
 !frontend/dist/.gitkeep
+/dist/

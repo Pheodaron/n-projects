@@ -38,3 +38,9 @@ run = 'goose -dir migrations down'
 [tasks.migrate]
 env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
 run = 'goose -dir migrations up'
+
+[tasks."build:desktop:linux"]
+run = "docker build --platform linux/amd64 -f Dockerfile.desktop --target linux-export --output type=local,dest=dist/linux-amd64 ."
+
+[tasks."build:desktop:windows"]
+run = "docker build --platform linux/amd64 -f Dockerfile.desktop --target windows-export --output type=local,dest=dist/windows-amd64 ."

@@ -25,16 +25,28 @@ jobs:
         run: curl --fail --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/healthz
       - run: mise run test
       - run: mise exec -- go vet ./internal/... ./cmd/server
-      - name: Build standalone desktop client
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgtk-4-dev libwebkitgtk-6.0-dev
-          pnpm --dir frontend install --frozen-lockfile
-          pnpm --dir frontend build
-          go build -o /tmp/n-projects-desktop ./cmd/desktop
       - name: Compose logs
         if: failure()
         run: docker compose --env-file .env -f deploy/compose.yaml logs
       - name: Stop containers
         if: always()
         run: docker compose --env-file .env -f deploy/compose.yaml down --volumes
+
+  desktop:
+    name: Desktop binaries (${{ matrix.os }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux, windows]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build desktop binary
+        run: docker build --platform linux/amd64 -f Dockerfile.desktop --target ${{ matrix.os }}-export --output type=local,dest=dist/${{ matrix.os }}-amd64 .
+      - name: Inspect binary format
+        run: file dist/${{ matrix.os }}-amd64/n-projects*
+      - uses: actions/upload-artifact@v6
+        with:
+          name: desktop-${{ matrix.os }}-amd64
+          path: dist/${{ matrix.os }}-amd64/n-projects*
+          if-no-files-found: error

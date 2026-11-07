@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+.github
+.tools
+.data
+node_modules
+frontend/node_modules
+frontend/dist
+frontend/.vite
+bin
+dist
+docs
+*.log
