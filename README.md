@@ -68,7 +68,16 @@ Goose подключается к опубликованному порту Post
 
 ## Desktop-клиент
 
-Wails запускается отдельно на компьютере пользователя и обращается к backend через generated Go Connect-клиент. Параметры подключения задаются в окружении процесса согласно `.env.example`.
+Wails запускается отдельно на компьютере пользователя и обращается к backend через generated Go Connect-клиент. По умолчанию подключается к `http://127.0.0.1:8080` с токеном `dev-token`; настройка env для desktop не требуется.
+
+```sh
+./desktop
+./desktop --backend-url https://agent.example.com
+./desktop --backend-url https://agent.example.com --token custom-token
+./desktop --help
+```
+
+Токен клиента должен совпадать с настроенным на backend. Серверные параметры остаются в `.env.example`.
 
 Нативные зависимости для сборки клиента: на Linux — `build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev`, на macOS — Xcode Command Line Tools, на Windows — WebView2. Локальные задачи запуска и сборки desktop удалены из mise; CI отдельно проверяет компиляцию клиента.
 
