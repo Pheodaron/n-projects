@@ -76,7 +76,7 @@ flowchart LR
 
 | Шаг | Что реализовать | Проверяемый результат |
 |---|---|---|
-| **1.1. Запуск компонентов** | Go-модуль, `cmd/server`, `cmd/desktop`, frontend; mise и Buf; Protobuf/Connect codegen; PostgreSQL; llama-server; одно окно Wails; `.env.example` и README | Окно открывается; generated Go client вызывает backend; настоящий llama-server возвращает ответ на smoke-запрос |
+| **1.1. Запуск компонентов** | Go-модуль, `cmd/server`, `cmd/desktop`, frontend; mise и protoc; Protobuf/Connect codegen; PostgreSQL; llama-server; одно окно Wails; `.env.example` и README | Окно открывается; generated Go client вызывает backend; настоящий llama-server возвращает ответ на smoke-запрос |
 | **1.2. Чаты и история** | Миграции Session/Message/Run, unary RPC для CRUD чатов, dev identity, проверки принадлежности, список и история в UI | Чат можно создать, переименовать, открыть и удалить; данные переживают перезапуск |
 | **1.3. Диалоговый агент** | TurnLoop + ChatModelAgent, llama.cpp adapter, system prompt, контекст чата, создание run, сохранение assistant-message | Сообщение из desktop проходит через backend и llama.cpp; следующий ответ учитывает предыдущий ход |
 | **1.4. Поток и Stop** | Server-streaming `WatchRun`, промежуточные snapshots, ограниченные буферы, unary `CancelRun`, таймауты и Connect errors | Текст появляется постепенно; Stop завершает локальное исполнение; закрытие stream отменяет только подписку |
@@ -102,8 +102,6 @@ internal/platform/postgres/
 frontend/src/features/chat/
 proto/nprojects/v1/        # SessionService, RunService и сообщения
 gen/go/nprojects/v1/       # generated Protobuf и Connect-код
-buf.yaml
-buf.gen.yaml
 migrations/
 deploy/compose.yaml        # только инфраструктура текущего этапа
 .mise.toml
@@ -124,7 +122,7 @@ Registry, documents, speech и ingestion worker появляются на сво
 - **Простой контекст.** System prompt и последние завершённые ходы текущего чата в пределах лимита модели; незавершённые ответы не выдаются за полные. При отсечении старой истории UI сообщает об ограничении; слишком большое одиночное сообщение возвращает понятную ошибку. Автоматическое summary добавляется на этапе 8.
 - **Простая защита повторов.** Создание пользовательского сообщения и Run выполняется одной транзакцией; `request_id` в изменяющем Protobuf-запросе служит ключом идемпотентности и не допускает дубля при сетевом повторе. Удаление чата с активным run возвращает Connect `FailedPrecondition` до его остановки.
 
-Контракт Core: `SessionService.CreateSession/ListSessions/GetSession/UpdateSession/DeleteSession/ListMessages` и `RunService.StartRun/GetRun/CancelRun/WatchRun`. Все методы unary, кроме `WatchRun` с server streaming. Источник контракта — `.proto`; Buf выполняет lint, codegen и проверку совместимости относительно принятой версии. Go-клиент desktop и Go handlers генерируются вместе. Отдельный TypeScript Connect-клиент не нужен: Webview использует локальные bindings.
+Контракт Core: `SessionService.CreateSession/ListSessions/GetSession/UpdateSession/DeleteSession/ListMessages` и `RunService.StartRun/GetRun/CancelRun/WatchRun`. Все методы unary, кроме `WatchRun` с server streaming. Источник контракта — `.proto`; protoc выполняет codegen; проверка proto:check обнаруживает расхождения generated-кода с коммитом. Go-клиент desktop и Go handlers генерируются вместе. Отдельный TypeScript Connect-клиент не нужен: Webview использует локальные bindings.
 
 Доменный `Run.status=failed` приходит в типизированном snapshot; transport/RPC error приходит как Connect error. `Unavailable` допускает reconnect подписки, `Unauthenticated/PermissionDenied` требует обновления доступа, `ResourceExhausted` отображает занятость, `InvalidArgument` — ошибку ввода. Повтор изменяющего RPC использует тот же `request_id`; слепой автоматический retry всех команд не включается.
 
@@ -151,9 +149,9 @@ Stop гарантирует прекращение локального чтен
 | `mise install` | Установить закреплённые доступные инструменты |
 | `mise run doctor` | Проверить Go, frontend, Wails OS-зависимости, llama-server, конфигурацию и GGUF |
 | `mise run infra` | Поднять PostgreSQL |
-| `mise run migrate` | Применить миграции |
-| `mise run generate` | Сгенерировать Protobuf и Go Connect-код через Buf с закреплёнными plugins |
-| `mise run proto:check` | Проверить lint и обратную совместимость Protobuf-контракта |
+| `mise run migrate` | Применить Goose SQL из migrations/ |
+| `mise run generate` | Сгенерировать Protobuf и Go Connect-код через protoc с закреплёнными plugins |
+| `mise run proto:check` | Проверить отсутствие расхождений generated-кода |
 | `mise run dev:llama` | Запустить llama-server с выбранной моделью |
 | `mise run dev:server` | Запустить Go backend |
 | `mise run dev:desktop` | Запустить Wails desktop |
@@ -312,3 +310,5 @@ Registry использует внутренний контракт, ledger, app
 ## 14. Ближайший объём работ
 
 Следующая задача на реализацию — **только этап 1, шаги 1.1–1.6**. Его завершение означает работающий диалоговый продукт с llama.cpp и сохраняемыми чатами. До приёмки Core подключение функций последующих этапов не входит в объём этой задачи.
+
+Миграции БД выполняются Goose из `migrations/` отдельной mise-задачей. Генерация ConnectRPC выполняется `protoc`, установленным через mise; Buf не используется.

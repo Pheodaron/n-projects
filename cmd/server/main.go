@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"github.com/Pheodaron/n-projects/internal/agent"
 	"github.com/Pheodaron/n-projects/internal/agent/engine"
@@ -30,8 +29,6 @@ func main() {
 	}
 }
 func run() error {
-	migrate := flag.Bool("migrate-only", false, "Apply schema and exit")
-	flag.Parse()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	token := os.Getenv("DEV_TOKEN")
@@ -60,12 +57,6 @@ func run() error {
 	}
 	defer lock.Exec(context.Background(), "SELECT pg_advisory_unlock(78423982)")
 	store := chat.NewStore(pool)
-	if e = store.Migrate(ctx); e != nil {
-		return e
-	}
-	if *migrate {
-		return nil
-	}
 	model, e := engine.New(engine.Config{BaseURL: env("LLAMA_BASE_URL", "http://127.0.0.1:8081/v1"), Model: env("LLAMA_MODEL", "local"), APIKey: os.Getenv("LLAMA_API_KEY")})
 	if e != nil {
 		return e

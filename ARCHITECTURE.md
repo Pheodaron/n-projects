@@ -103,8 +103,6 @@ n-projects/
 │   └── src/features/        # chat, tasks, documents, settings
 ├── proto/nprojects/v1/      # Protobuf services и сообщения
 ├── gen/go/nprojects/v1/     # generated Protobuf/Connect-код
-├── buf.yaml
-├── buf.gen.yaml
 ├── migrations/
 ├── deploy/compose.yaml
 ├── docs/adr/
@@ -280,7 +278,7 @@ Go bridge предоставляет Webview небольшое прикладн
 
 ## 9. ConnectRPC-контракт
 
-Источник контракта — Protobuf package `nprojects.v1` в `proto/nprojects/v1`. Buf и закреплённые plugins генерируют Go messages, Connect handlers и Go-клиент. `mise run generate` воспроизводит код, `mise run proto:check` выполняет lint и breaking checks относительно принятой версии. Для внутренних команд не поддерживается параллельный REST/OpenAPI-контракт.
+Источник контракта — Protobuf package `nprojects.v1` в `proto/nprojects/v1`. protoc и закреплённые plugins генерируют Go messages, Connect handlers и Go-клиент. `mise run generate` воспроизводит код, `mise run proto:check` проверяет воспроизводимость generated-кода. Для внутренних команд не поддерживается параллельный REST/OpenAPI-контракт.
 
 | Service.Method | Вид | Назначение и этап |
 |---|---|---|
@@ -405,8 +403,8 @@ Mise — единая точка входа для разработчика и C
 | `mise install` | Установка закреплённых инструментов |
 | `mise run doctor` | Версии, нативные Wails-зависимости, capability checks конвертеров |
 | `mise run infra` | PostgreSQL+pgvector и S3-compatible dev storage |
-| `mise run migrate` | Явное применение SQL migrations |
-| `mise run generate` / `proto:check` | Buf codegen, lint и проверка совместимости Protobuf-контракта |
+| `mise run migrate` | Goose: явное применение SQL из migrations/ |
+| `mise run generate` / `proto:check` | protoc codegen и проверка воспроизводимости generated-кода |
 | `mise run dev:server` / `dev:worker` / `dev:desktop` | Запуск компонентов |
 | `mise run fmt` / `lint` / `test` | Форматирование и согласованные проверки |
 | `mise run build` / `build:desktop` | Сборка backend и desktop |
@@ -509,3 +507,5 @@ Dev-инфраструктура — Docker Compose. В Core запускают�
 10. [Pandoc 3.8.3: changelog с добавлением XLSX reader](https://github.com/jgm/pandoc/blob/3.8.3/changelog.md).
 11. [Google DeepMind Gemma: README на проверенном commit](https://github.com/google-deepmind/gemma/blob/9e1f74131ba9d45e5fe6ae7bb3941d9f2abb39c3/README.md).
 12. [Google DeepMind Gemma: варианты checkpoints](https://github.com/google-deepmind/gemma/blob/9e1f74131ba9d45e5fe6ae7bb3941d9f2abb39c3/gemma/gm/ckpts/_paths.py).
+
+Миграции БД выполняются Goose из `migrations/` отдельной mise-задачей. Генерация ConnectRPC выполняется `protoc`, установленным через mise; Buf не используется.

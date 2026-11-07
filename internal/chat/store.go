@@ -49,10 +49,6 @@ func ID() string {
 	}
 	return hex.EncodeToString(b)
 }
-func (s *Store) Migrate(ctx context.Context) error {
-	_, e := s.Pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS sessions(id text PRIMARY KEY, owner_id text NOT NULL, workspace_id text NOT NULL, data jsonb NOT NULL); CREATE TABLE IF NOT EXISTS runs(id text PRIMARY KEY, session_id text NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, owner_id text NOT NULL, workspace_id text NOT NULL, data jsonb NOT NULL); CREATE TABLE IF NOT EXISTS receipts(key text PRIMARY KEY, hash text NOT NULL, result jsonb NOT NULL);`)
-	return e
-}
 func (s *Store) transaction(ctx context.Context, a Actor, method, key string, payload any, fn func(pgx.Tx) (any, error), out any) error {
 	if key == "" || len(key) > 128 {
 		return ErrInvalid

@@ -18,6 +18,7 @@ def interrupted(*_): raise KeyboardInterrupt
 signal.signal(signal.SIGTERM, interrupted)
 try:
     subprocess.run(['mise', 'run', 'infra'], check=True)
+    subprocess.run(['mise', 'run', 'migrate'], check=True)
     if os.environ.get('LLAMA_MODEL_FILE'): start('dev:llama')
     start('dev:server')
     wait(os.environ.get('BACKEND_URL','http://127.0.0.1:8080')+'/readyz')

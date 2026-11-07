@@ -2,7 +2,8 @@
 go = "1.27.3"
 node = "24.22.1"
 pnpm = "11.25.0"
-buf = "1.57.2"
+protoc = "32.1"
+"github:pressly/goose" = "3.24.3"
 "go:google.golang.org/protobuf/cmd/protoc-gen-go" = "1.36.6"
 "go:connectrpc.com/connect/cmd/protoc-gen-connect-go" = "1.18.1"
 
@@ -10,13 +11,15 @@ buf = "1.57.2"
 _.file = ".env"
 
 [tasks.generate]
-run = "buf generate"
+run = "protoc --proto_path=proto --go_out=gen/go --go_opt=paths=source_relative --connect-go_out=gen/go --connect-go_opt=paths=source_relative proto/nprojects/v1/core.proto"
 [tasks."proto:check"]
-run = "buf lint"
+depends = ["generate"]
+run = "git diff --exit-code -- gen/go"
 [tasks.infra]
 run = "docker compose -f deploy/compose.yaml up -d --wait"
 [tasks.migrate]
-run = "go run ./cmd/server --migrate-only"
+env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
+run = 'goose -dir migrations up'
 [tasks."dev:server"]
 run = "go run ./cmd/server"
 [tasks."dev:desktop"]
@@ -30,10 +33,17 @@ run = "pnpm --dir frontend install --frozen-lockfile && pnpm --dir frontend buil
 depends = ["build:frontend"]
 run = "mkdir -p bin && go build -o bin/server ./cmd/server && go build -o bin/desktop ./cmd/desktop"
 [tasks.test]
-run = "go test -race ./internal/..."
+run = "go test -race ./internal/... ./migrations"
 [tasks.fmt]
-run = "gofmt -w cmd internal frontend/embed.go"
+run = "gofmt -w cmd internal migrations frontend/embed.go"
 [tasks.doctor]
 run = "python3 scripts/doctor.py"
 [tasks.dev]
 run = "python3 scripts/dev.py"
+
+[tasks."migrate:status"]
+env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
+run = 'goose -dir migrations status'
+[tasks."migrate:down"]
+env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
+run = 'goose -dir migrations down'

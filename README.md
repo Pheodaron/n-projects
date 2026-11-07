@@ -4,7 +4,7 @@ Go backend + Wails desktop + ConnectRPC + Eino `TurnLoop` / `ChatModelAgent` + l
 
 ## Подготовка
 
-Установите [mise](https://mise.jdx.dev), Docker с Compose и нативные зависимости Wails. Для Linux (Debian/Ubuntu): `build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`. macOS требует Xcode Command Line Tools; Windows — WebView2. Python 3 используется для локальных launchers.
+Установите [mise](https://mise.jdx.dev), Docker с Compose и нативные зависимости Wails. Для Linux (Debian/Ubuntu): `build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev`. macOS требует Xcode Command Line Tools; Windows — WebView2. Python 3 используется для локальных launchers.
 
 ```sh
 mise trust
@@ -48,6 +48,8 @@ mise run dev:desktop
 
 ## Использование
 
+Миграции применяются явно: `mise run migrate` вызывает Goose для SQL из `migrations/`. Сервер не создаёт таблицы. `mise run dev` применяет миграции перед запуском backend. Статус: `mise run migrate:status`; откат последней миграции: `mise run migrate:down` (удаляет данные начальной схемы). Существующие таблицы Core сохраняются первой миграцией.
+
 Создайте чат, отправьте сообщение и дождитесь потокового ответа. Enter отправляет, Shift+Enter добавляет строку. Stop отменяет генерацию; закрытие окна/подписки её не отменяет. Чаты можно переименовывать и удалять после завершения активного run.
 
 Каждый принятый run выполняется через настоящий Eino TurnLoop с ChatModelAgent. В Core loop ограничен одним ходом, после чего завершается. Следующий запрос получает историю из БД. Один слот генерации и один активный run на чат; очередь, checkpoints и resume относятся к следующему этапу. При перезапуске backend незавершённые runs отмечаются `interrupted`, сохраняют доступный текст и освобождают чат. Второй backend на той же БД отклоняется advisory lock.
@@ -73,6 +75,6 @@ TEST_DATABASE_URL=postgres://nprojects:dev@127.0.0.1:5432/nprojects?sslmode=disa
 
 Тест создаёт отдельную схему и удаляет её после завершения; использует настоящий PostgreSQL, Connect-клиент и Eino TurnLoop с управляемым HTTP model fixture. Он проверяет streaming, историю, владение, идемпотентность и CRUD. Такая проверка не подтверждает совместимость произвольного GGUF. Приёмка конкретной модели требует реального llama-server: первый ответ, второй ход с контекстом, Stop и успешный следующий ответ.
 
-Go bindings используют закреплённый Wails fork commit `1d1c0c36d0bc`; frontend runtime соответствует его версии `3.1.0-nightly.20261028`. Сгенерированные Protobuf/Connect-файлы и pnpm lockfile включены в Git.
+Go bindings используют закреплённый Wails fork commit `1d1c0c36d0bc`; frontend runtime соответствует его версии `3.1.0-nightly.20261028`. Сгенерированные Protobuf/Connect-файлы и pnpm lockfile включены в Git. `protoc` и оба Go plugins установлены через mise; `mise run generate` вызывает protoc напрямую. `mise run proto:check` проверяет отсутствие расхождений generated-кода с коммитом.
 
 Архитектура: [ARCHITECTURE.md](ARCHITECTURE.md). Порядок последующих работ: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), этапы 1 → 4 → 5 → 3 → 2 и далее.

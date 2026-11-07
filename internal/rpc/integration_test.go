@@ -10,6 +10,7 @@ import (
 	"github.com/Pheodaron/n-projects/internal/agent/engine"
 	"github.com/Pheodaron/n-projects/internal/chat"
 	"github.com/Pheodaron/n-projects/internal/rpc"
+	"github.com/Pheodaron/n-projects/migrations"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"io"
 	"net/http"
@@ -50,7 +51,7 @@ func TestCoreConnectPostgresTurnLoop(t *testing.T) {
 	}
 	defer pool.Close()
 	store := chat.NewStore(pool)
-	if e = store.Migrate(ctx); e != nil {
+	if e = migrations.Up(ctx, pool); e != nil {
 		t.Fatal(e)
 	}
 	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
