@@ -12,7 +12,7 @@ mise trust
 mise install
 ```
 
-В `.env` задайте `DEV_TOKEN`, `POSTGRES_PASSWORD`, `DATABASE_URL`, `LLAMA_BASE_URL`, `LLAMA_MODEL` и при необходимости `LLAMA_API_KEY`. В DATABASE_URL имя сервиса БД — `postgres`; пароль должен соответствовать POSTGRES_PASSWORD. Для production задайте собственные значения и разместите endpoint за TLS proxy.
+В `.env` задайте `DEV_TOKEN`, `POSTGRES_PASSWORD`, `DATABASE_URL`, `BACKEND_DATABASE_URL`, `LLAMA_BASE_URL`, `LLAMA_MODEL` и при необходимости `LLAMA_API_KEY`. `DATABASE_URL` используется Goose с хоста (`127.0.0.1:5432`), `BACKEND_DATABASE_URL` — сервером внутри Compose (`postgres:5432`). Обе строки указывают на одну базу; пароль должен соответствовать POSTGRES_PASSWORD. Для production задайте собственные значения и разместите endpoint за TLS proxy.
 
 llama.cpp — уже работающий внешний сервис. Его адрес должен быть доступен из контейнера: `localhost` внутри контейнера указывает на сам контейнер. Веса модели и inference-сервер в образ не входят.
 
@@ -24,23 +24,25 @@ llama.cpp — уже работающий внешний сервис. Его а
 docker build -t n-projects:local .
 ```
 
-Dockerfile имеет builder-стадию Go и минимальный runtime `scratch`. Runtime содержит backend, Goose, SQL-миграции и CA-сертификаты. Выполнение идёт от непривилегированного UID. Frontend, Wails, Go toolchain и исходный код в runtime не попадают. Goose собирается только с PostgreSQL-драйвером.
+Dockerfile имеет builder-стадию Go и runtime `gcr.io/distroless/static-debian12:nonroot`. В runtime копируется только статически собранный backend. CA-сертификаты и непривилегированный пользователь уже предоставлены distroless. Goose, миграции, frontend, Wails и Go toolchain в образ backend не входят.
 
 ## Запуск
 
 Отдельно от сборки:
 
 ```sh
+docker compose --env-file .env -f deploy/compose.yaml up -d --wait postgres
+mise run migrate
 mise run compose:up
 ```
 
-Эквивалент:
+Последняя команда эквивалентна:
 
 ```sh
 docker compose --env-file .env -f deploy/compose.yaml up -d --wait
 ```
 
-Порядок старта: здоровый PostgreSQL → одноразовый контейнер Goose → backend. Backend и migrate используют один предварительно собранный образ. В Compose нет `build` и монтирования исходников. После изменения кода повторите отдельную команду сборки и затем команду запуска.
+Порядок старта: PostgreSQL в Compose → явный запуск Goose из корня проекта → backend в Compose. Миграции выполняются до запуска/обновления backend; автоматического применения схемы при compose up нет. В Compose нет `build` и монтирования исходников. После изменения кода повторите отдельную команду сборки и затем команду запуска.
 
 Для registry-образа укажите `APP_IMAGE=registry.example/n-projects:version` в `.env`, выполните `docker compose --env-file .env -f deploy/compose.yaml pull`, затем запустите Compose.
 
@@ -54,14 +56,15 @@ docker compose --env-file .env -f deploy/compose.yaml down
 
 ## Миграции
 
-SQL находится в `migrations/`. Compose выполняет `up` автоматически через отдельный контейнер; сервер не создаёт таблицы.
+SQL находится в `migrations/`. Goose установлен через mise и запускается из корня проекта:
 
 ```sh
-docker compose --env-file .env -f deploy/compose.yaml run --rm migrate -dir /migrations status
-docker compose --env-file .env -f deploy/compose.yaml run --rm migrate -dir /migrations down
+mise run migrate
+mise run migrate:status
+mise run migrate:down
 ```
 
-Откат первой миграции удаляет Core-таблицы. Первая миграция сохраняет данные установок, созданных до внедрения Goose. Для операторского запуска Goose с хоста сохранены mise-задачи `migrate`, `migrate:status`, `migrate:down`; в этом случае DATABASE_URL должен указывать на опубликованный порт хоста, например `127.0.0.1:5432`.
+Goose использует `DATABASE_URL` с опубликованным адресом PostgreSQL на хосте. В Compose нет сервиса миграций; backend не изменяет схему БД. Откат первой миграции удаляет Core-таблицы. Первая миграция сохраняет данные установок, созданных до внедрения Goose.
 
 ## Desktop-клиент
 

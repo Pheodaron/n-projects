@@ -15,7 +15,11 @@ jobs:
         run: mise run generate && git diff --exit-code -- gen/go
       - name: Build backend image
         run: docker build -t n-projects:local .
-      - name: Start backend, Goose and PostgreSQL
+      - name: Start PostgreSQL
+        run: docker compose --env-file .env -f deploy/compose.yaml up -d --wait postgres
+      - name: Apply migrations from project root
+        run: mise run migrate
+      - name: Start backend
         run: mise run compose:up
       - name: Verify container health
         run: curl --fail --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/healthz

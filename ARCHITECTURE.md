@@ -402,7 +402,7 @@ Mise — единая точка входа для разработчика и C
 |---|---|
 | `mise install` | Установка закреплённых инструментов |
 | `docker build -t n-projects:local .` | Отдельная сборка backend-образа |
-| `mise run compose:up` | Запуск backend, Goose и PostgreSQL из готовых образов |
+| `mise run compose:up` | Запуск backend и PostgreSQL из готовых образов |
 | `mise run migrate` | Goose: явное применение SQL из migrations/ |
 | `mise run generate` / `proto:check` | protoc codegen и проверка воспроизводимости generated-кода |
 | `docker compose --env-file .env -f deploy/compose.yaml down` | Остановка контейнеров с сохранением данных |
@@ -510,4 +510,6 @@ Dev-инфраструктура — Docker Compose. В Core запускают�
 
 Миграции БД выполняются Goose из `migrations/` отдельной mise-задачей. Генерация ConnectRPC выполняется `protoc`, установленным через mise; Buf не используется.
 
-Backend во всех режимах запускается в контейнере через Compose. Образ собирается отдельной командой Dockerfile; `build` в Compose отсутствует. Goose выполняется отдельным одноразовым сервисом до старта backend. Wails остаётся отдельным клиентом. Локальные dev/build-задачи и scripts удалены.
+Backend во всех режимах запускается в контейнере через Compose. Образ собирается отдельной командой Dockerfile; `build` в Compose отсутствует. Goose запускается из корня проекта через `mise run migrate` перед запуском backend; отдельного сервиса миграций в Compose нет. Wails остаётся отдельным клиентом. Локальные dev/build-задачи и scripts удалены.
+
+Runtime backend — distroless static-debian12:nonroot; образ содержит только серверный бинарник поверх runtime. Миграции остаются в migrations/ и применяются с хоста отдельной mise-задачей.

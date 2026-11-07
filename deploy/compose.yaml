@@ -5,7 +5,7 @@ services:
     image: ${APP_IMAGE:-n-projects:local}
     environment:
       SERVER_ADDR: 0.0.0.0:8080
-      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      DATABASE_URL: ${BACKEND_DATABASE_URL:?Set BACKEND_DATABASE_URL}
       DEV_TOKEN: ${DEV_TOKEN:?Set DEV_TOKEN}
       LLAMA_BASE_URL: ${LLAMA_BASE_URL:?Set LLAMA_BASE_URL}
       LLAMA_MODEL: ${LLAMA_MODEL:?Set LLAMA_MODEL}
@@ -15,21 +15,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
     restart: unless-stopped
-
-  migrate:
-    image: ${APP_IMAGE:-n-projects:local}
-    entrypoint: ["/goose"]
-    command: ["-dir", "/migrations", "up"]
-    environment:
-      GOOSE_DRIVER: postgres
-      GOOSE_DBSTRING: ${DATABASE_URL:?Set DATABASE_URL}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
 
   postgres:
     image: postgres:17.6

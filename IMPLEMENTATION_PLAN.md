@@ -148,7 +148,7 @@ Stop гарантирует прекращение локального чтен
 |---|---|
 | `mise install` | Установить закреплённые доступные инструменты |
 | `docker build -t n-projects:local .` | Собрать минимальный multi-stage образ backend |
-| `mise run compose:up` | Запустить backend, миграции Goose и PostgreSQL без сборки |
+| `mise run compose:up` | Запустить backend и PostgreSQL без сборки |
 | `mise run migrate` / `migrate:status` / `migrate:down` | Операторские задачи Goose; URL должен быть доступен с хоста |
 | `mise run generate` | Сгенерировать Protobuf и Go Connect-код через protoc |
 | `mise run test` / `fmt` | Проверки и форматирование |
@@ -309,3 +309,5 @@ Registry использует внутренний контракт, ledger, app
 Миграции БД выполняются Goose из `migrations/` отдельной mise-задачей. Генерация ConnectRPC выполняется `protoc`, установленным через mise; Buf не используется.
 
 Backend в разработке и production запускается через Compose из предварительно собранного образа. Wails — отдельный клиент. Локальные dev/build-задачи и scripts удалены; сборка Dockerfile и compose up выполняются разными командами.
+
+Runtime backend — distroless static-debian12:nonroot; образ содержит только серверный бинарник поверх runtime. Миграции остаются в migrations/ и применяются с хоста отдельной mise-задачей.
