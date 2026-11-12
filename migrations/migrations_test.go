@@ -2,11 +2,11 @@ package migrations_test
 
 import (
 	"context"
+	"crypto/rand"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/Pheodaron/n-projects/internal/chat"
 	"github.com/Pheodaron/n-projects/migrations"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -24,7 +24,7 @@ func TestAdoptExistingCoreAndRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer admin.Close()
-	schema := "migration_" + chat.ID()
+	schema := "migration_" + strings.ToLower(rand.Text())
 	if _, err = admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
 		t.Fatal(err)
 	}

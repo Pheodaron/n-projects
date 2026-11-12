@@ -14,9 +14,10 @@ jobs:
       - name: Verify generated RPC contract
         run: mise run generate && git diff --exit-code -- gen/go
       - name: Build backend image
-        run: docker build -t n-projects:local .
+        working-directory: apps_back/server
+        run: mise trust && mise run build
       - name: Start PostgreSQL
-        run: docker compose --env-file .env -f deploy/compose.yaml up -d --wait postgres
+        run: docker compose --env-file .env -f compose.yaml up -d --wait postgres
       - name: Apply migrations from project root
         run: mise run migrate
       - name: Start backend
@@ -24,13 +25,13 @@ jobs:
       - name: Verify container health
         run: curl --fail --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/healthz
       - run: mise run test
-      - run: mise exec -- go vet ./internal/... ./cmd/server
+      - run: mise exec -- go vet ./apps_back/server/... ./apps/desktop/internal/... ./migrations
       - name: Compose logs
         if: failure()
-        run: docker compose --env-file .env -f deploy/compose.yaml logs
+        run: docker compose --env-file .env -f compose.yaml logs
       - name: Stop containers
         if: always()
-        run: docker compose --env-file .env -f deploy/compose.yaml down --volumes
+        run: docker compose --env-file .env -f compose.yaml down --volumes
 
   desktop:
     name: Desktop binaries (${{ matrix.os }})
@@ -42,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build desktop binary
-        run: docker build --platform linux/amd64 -f Dockerfile.desktop --target ${{ matrix.os }}-export --output type=local,dest=dist/${{ matrix.os }}-amd64 .
+        run: docker build --platform linux/amd64 -f apps/desktop/Dockerfile --target ${{ matrix.os }}-export --output type=local,dest=dist/${{ matrix.os }}-amd64 .
       - name: Inspect binary format
         run: file dist/${{ matrix.os }}-amd64/n-projects*
       - uses: actions/upload-artifact@v6

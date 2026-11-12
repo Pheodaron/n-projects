@@ -76,7 +76,7 @@ flowchart LR
 
 | Шаг | Что реализовать | Проверяемый результат |
 |---|---|---|
-| **1.1. Запуск компонентов** | Go-модуль, `cmd/server`, `cmd/desktop`, frontend; mise и protoc; Protobuf/Connect codegen; PostgreSQL; llama-server; одно окно Wails; `.env.example` и README | Окно открывается; generated Go client вызывает backend; настоящий llama-server возвращает ответ на smoke-запрос |
+| **1.1. Запуск компонентов** | Monorepo, `apps_back/server`, `apps/desktop`, отдельные Go-модули; mise и protoc; Protobuf/Connect codegen; PostgreSQL; llama-server; одно окно Wails; `.env.example` и README | Окно открывается; generated Go client вызывает backend; настоящий llama-server возвращает ответ на smoke-запрос |
 | **1.2. Чаты и история** | Миграции Session/Message/Run, unary RPC для CRUD чатов, dev identity, проверки принадлежности, список и история в UI | Чат можно создать, переименовать, открыть и удалить; данные переживают перезапуск |
 | **1.3. Диалоговый агент** | TurnLoop + ChatModelAgent, llama.cpp adapter, system prompt, контекст чата, создание run, сохранение assistant-message | Сообщение из desktop проходит через backend и llama.cpp; следующий ответ учитывает предыдущий ход |
 | **1.4. Поток и Stop** | Server-streaming `WatchRun`, промежуточные snapshots, ограниченные буферы, unary `CancelRun`, таймауты и Connect errors | Текст появляется постепенно; Stop завершает локальное исполнение; закрытие stream отменяет только подписку |
@@ -88,23 +88,31 @@ UI подключается по мере готовности API, а не от
 ### 3.3. Минимальная структура проекта
 
 ```text
-cmd/server/
-cmd/desktop/
-internal/app/
-internal/chat/             # Session, Message, SQL и операции чатов
-internal/agent/            # Run, ограниченный executor, контекст и отмена
-internal/agent/engine/     # Eino TurnLoop + ChatModelAgent и llama.cpp adapter
-internal/rpc/              # Connect handlers/interceptors, перевод Protobuf ↔ application types
-internal/apiclient/        # обёртка generated Go Connect-клиента для desktop
-internal/desktop/          # Wails bindings и одно окно
-internal/platform/config/
-internal/platform/postgres/
-frontend/src/features/chat/
-proto/nprojects/v1/        # SessionService, RunService и сообщения
-gen/go/nprojects/v1/       # generated Protobuf и Connect-код
-migrations/
-deploy/compose.yaml        # только инфраструктура текущего этапа
-.mise.toml
+apps/desktop/
+  main.go
+  internal/desktop/       # Wails bridge и события
+  frontend/               # React + TypeScript + Vite
+  build/config.yml        # Wails dev watcher
+  Taskfile.yml
+  mise.toml               # Go/Node latest, Wails3 CLI, doctor/dev/production
+  Dockerfile              # экспорт Linux и Windows бинарников
+  go.mod
+apps_back/server/
+  cmd/server/
+  internal/chat/          # Session, Message, SQL
+  internal/agent/         # Run, executor, контекст и отмена
+  internal/agent/engine/  # Eino TurnLoop + ChatModelAgent
+  internal/rpc/           # Connect handlers/interceptors
+  mise.toml               # сборка образа и проверки сервера
+  Dockerfile
+  go.mod
+proto/nprojects/v1/       # общий контракт
+gen/go/nprojects/v1/     # generated Protobuf и Connect-код
+migrations/              # Goose SQL, применение из корня
+compose.yaml             # общий Compose для apps_back и PostgreSQL
+mise.toml                # общие инструменты, codegen, миграции и проверки
+go.work
+go.mod                   # общий контракт и миграции
 .env.example
 README.md
 ```
@@ -308,6 +316,6 @@ Registry использует внутренний контракт, ledger, app
 
 Миграции БД выполняются Goose из `migrations/` отдельной mise-задачей. Генерация ConnectRPC выполняется `protoc`, установленным через mise; Buf не используется.
 
-Backend в разработке и production запускается через Compose из предварительно собранного образа. Wails — отдельный клиент. Локальные dev/build-задачи и scripts удалены; сборка Dockerfile и compose up выполняются разными командами.
+Backend в разработке и production запускается через Compose из предварительно собранного образа. Wails — отдельный клиент. Каждый сервис в apps_back имеет собственные mise.toml и Dockerfile; общий compose.yaml находится в корне. Сборка образов и compose up выполняются разными командами. Desktop имеет отдельные Wails3 doctor/dev/production задачи; scripts не используется.
 
 Runtime backend — distroless static-debian12:nonroot; образ содержит только серверный бинарник поверх runtime. Миграции остаются в migrations/ и применяются с хоста отдельной mise-задачей.

@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/Pheodaron/n-projects/apps_back/server/internal/agent"
+	"github.com/Pheodaron/n-projects/apps_back/server/internal/chat"
 	nprojectsv1 "github.com/Pheodaron/n-projects/gen/go/nprojects/v1"
 	"github.com/Pheodaron/n-projects/gen/go/nprojects/v1/nprojectsv1connect"
-	"github.com/Pheodaron/n-projects/internal/agent"
-	"github.com/Pheodaron/n-projects/internal/chat"
 )
 
 type sessionStore interface {

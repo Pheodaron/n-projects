@@ -1,0 +1,40 @@
+version: '3'
+
+vars:
+  BINARY: 'bin/n-projects{{if eq OS "windows"}}.exe{{end}}'
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+
+tasks:
+  common:install:frontend:deps:
+    dir: frontend
+    run: once
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  common:dev:frontend:
+    dir: frontend
+    cmds:
+      - pnpm dev --port {{.VITE_PORT}} --strictPort
+
+  frontend:build:
+    dir: frontend
+    deps: [common:install:frontend:deps]
+    cmds:
+      - pnpm build
+
+  build:
+    desc: Build the desktop executable (production by default)
+    deps: [frontend:build]
+    env:
+      CGO_ENABLED: '{{if eq OS "windows"}}0{{else}}1{{end}}'
+    cmds:
+      - >-
+        go build
+        {{if eq .DEV "true"}}-gcflags="all=-l"
+        {{else}}-tags production -trimpath
+        -ldflags="-s -w{{if eq OS "windows"}} -H windowsgui{{end}}"{{end}}
+        -o {{.BINARY}} .
+
+  run:
+    cmds:
+      - '{{.BINARY}}'

@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
-	"github.com/Pheodaron/n-projects/internal/chat"
+	"github.com/Pheodaron/n-projects/apps_back/server/internal/chat"
 )
 
 type actorKey struct{}

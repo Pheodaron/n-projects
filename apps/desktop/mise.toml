@@ -1,0 +1,22 @@
+[tools]
+go = "latest"
+node = "latest"
+pnpm = "11.25.0"
+"go:github.com/wailsapp/wails/v3/cmd/wails3" = { version = "v3.0.0", install_env = { GOPROXY = "https://goproxy.io,direct" } }
+
+[tasks.doctor]
+run = "wails3 doctor"
+
+[tasks.dev]
+run = "wails3 dev"
+
+[tasks.production]
+run = "wails3 build"
+
+[tasks."build:linux"]
+dir = "../.."
+run = "docker build --platform linux/amd64 -f apps/desktop/Dockerfile --target linux-export --output type=local,dest=dist/linux-amd64 ."
+
+[tasks."build:windows"]
+dir = "../.."
+run = "docker build --platform linux/amd64 -f apps/desktop/Dockerfile --target windows-export --output type=local,dest=dist/windows-amd64 ."

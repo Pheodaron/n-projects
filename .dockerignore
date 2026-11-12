@@ -2,10 +2,12 @@
 .env
 .env.*
 .github
-frontend
+apps
 node_modules
 bin
 .tools
 .data
 *.log
 dist
+**/node_modules
+**/bin

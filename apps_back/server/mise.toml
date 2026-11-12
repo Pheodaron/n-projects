@@ -1,0 +1,15 @@
+[tools]
+go = "1.27.3"
+
+[tasks.build]
+dir = "../.."
+run = "docker build -f apps_back/server/Dockerfile -t n-projects:local ."
+
+[tasks.test]
+run = "go test -race ./..."
+
+[tasks.vet]
+run = "go vet ./..."
+
+[tasks.fmt]
+run = "gofmt -w cmd internal"

@@ -15,7 +15,7 @@ type Run = {
 const call = async (method: string, data: unknown = {}) =>
   JSON.parse(
     (await Call.ByName(
-      "github.com/Pheodaron/n-projects/internal/desktop.Bridge.Call",
+      "github.com/Pheodaron/n-projects/apps/desktop/internal/desktop.Bridge.Call",
       method,
       JSON.stringify(data),
     )) as string,
@@ -38,7 +38,7 @@ function App() {
     setSessions((await call("ListSessions")).sessions || []);
   const watch = (id: string) =>
     Call.ByName(
-      "github.com/Pheodaron/n-projects/internal/desktop.Bridge.Watch",
+      "github.com/Pheodaron/n-projects/apps/desktop/internal/desktop.Bridge.Watch",
       id,
     );
   const open = async (id: string) => {

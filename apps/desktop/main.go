@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Pheodaron/n-projects/frontend"
-	"github.com/Pheodaron/n-projects/internal/desktop"
+	"github.com/Pheodaron/n-projects/apps/desktop/frontend"
+	"github.com/Pheodaron/n-projects/apps/desktop/internal/desktop"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 

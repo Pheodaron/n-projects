@@ -1,7 +1,5 @@
 [tools]
 go = "1.27.3"
-node = "24.22.1"
-pnpm = "11.25.0"
 protoc = "32.1"
 "github:pressly/goose" = "3.24.3"
 "go:google.golang.org/protobuf/cmd/protoc-gen-go" = "1.36.6"
@@ -21,26 +19,22 @@ protoc \
 """
 
 [tasks."compose:up"]
-run = "docker compose --env-file .env -f deploy/compose.yaml up -d --wait"
+run = "docker compose --env-file .env -f compose.yaml up -d --wait"
 
 [tasks.test]
-run = "go test -race ./internal/... ./migrations"
-[tasks.fmt]
-run = "gofmt -w cmd internal migrations frontend/embed.go"
+run = "go test -race ./... ./apps_back/server/... ./apps/desktop/internal/..."
 
-[tasks."migrate:status"]
-env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
-run = 'goose -dir migrations status'
-[tasks."migrate:down"]
-env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
-run = 'goose -dir migrations down'
+[tasks.fmt]
+run = "gofmt -w apps/desktop apps_back/server migrations"
 
 [tasks.migrate]
 env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
 run = 'goose -dir migrations up'
 
-[tasks."build:desktop:linux"]
-run = "docker build --platform linux/amd64 -f Dockerfile.desktop --target linux-export --output type=local,dest=dist/linux-amd64 ."
+[tasks."migrate:down"]
+env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
+run = 'goose -dir migrations down'
 
-[tasks."build:desktop:windows"]
-run = "docker build --platform linux/amd64 -f Dockerfile.desktop --target windows-export --output type=local,dest=dist/windows-amd64 ."
+[tasks."migrate:status"]
+env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }
+run = 'goose -dir migrations status'

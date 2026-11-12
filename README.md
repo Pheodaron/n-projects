@@ -1,10 +1,23 @@
-# n-projects — Core
+# n-projects
 
-Backend Go с ConnectRPC, Eino TurnLoop + ChatModelAgent и PostgreSQL. Backend и БД запускаются через Docker Compose одинаково для разработки и production. Wails — отдельный desktop-клиент.
+Monorepo: Wails3 desktop-клиент, Go backend с ConnectRPC и Eino TurnLoop + ChatModelAgent, PostgreSQL. llama.cpp — внешний сервис.
 
-## Подготовка
+```text
+apps/desktop/         Wails3-приложение: main.go, internal/, frontend/, mise.toml, Dockerfile
+apps_back/server/     Backend: cmd/server/, internal/, mise.toml, Dockerfile
+proto/                Общий protobuf-контракт
+gen/go/               Generated Protobuf и ConnectRPC
+migrations/           SQL-миграции Goose и проверки
+compose.yaml          Общий запуск backend-сервисов и PostgreSQL
+mise.toml             Общие инструменты, codegen, миграции и тесты
+go.work               Связь трёх Go-модулей без публикации пакетов
+```
 
-Нужны Docker с Compose и [mise](https://mise.jdx.dev). Для генерации кода и тестов инструменты закреплены в `.mise.toml`.
+Корневой Go-модуль содержит общий RPC-контракт и миграции. Desktop и server имеют собственные `go.mod/go.sum`, закрытые `internal/` и зависимости.
+
+## Backend
+
+Нужны Docker с Compose и [mise](https://mise.jdx.dev). Из корня репозитория:
 
 ```sh
 cp .env.example .env
@@ -12,101 +25,96 @@ mise trust
 mise install
 ```
 
-Заполните `.env` по комментариям в [`.env.example`](.env.example).
+Заполните `.env` по комментариям в [`.env.example`](.env.example). Адрес готового llama.cpp должен быть доступен из контейнера; модель в образ не входит.
 
-llama.cpp — уже работающий внешний сервис. Его адрес должен быть доступен из контейнера: `localhost` внутри контейнера указывает на сам контейнер. Веса модели и inference-сервер в образ не входят.
-
-## Сборка образа
-
-Из корня репозитория:
+Каждый backend-сервис собирается через собственные `mise.toml` и `Dockerfile`. Для существующего сервера:
 
 ```sh
-docker build -t n-projects:local .
+cd apps_back/server
+mise trust
+mise install
+mise run build
+cd ../..
 ```
 
-Dockerfile имеет builder-стадию Go и runtime `gcr.io/distroless/static-debian12:nonroot`. В runtime копируется только статически собранный backend. CA-сертификаты и непривилегированный пользователь уже предоставлены distroless. Goose, миграции, frontend, Wails и Go toolchain в образ backend не входят.
-
-## Запуск
-
-Отдельно от сборки:
+Сборка использует корень репозитория как Docker context. Эквивалентная команда из корня:
 
 ```sh
-docker compose --env-file .env -f deploy/compose.yaml up -d --wait postgres
+docker build -f apps_back/server/Dockerfile -t n-projects:local .
+```
+
+Runtime — `gcr.io/distroless/static-debian12:nonroot`, в образ копируется только backend-бинарник. Frontend, Wails, Goose и Go toolchain в runtime не входят.
+
+Все серверные сервисы запускаются через **общий `compose.yaml`**. В Compose нет `build` и сервиса миграций:
+
+```sh
+docker compose --env-file .env -f compose.yaml up -d --wait postgres
 mise run migrate
 mise run compose:up
 ```
 
-Последняя команда эквивалентна:
+Миграции выполняются с хоста из корня до запуска или обновления backend. После изменения кода отдельно пересоберите образ и повторите запуск Compose. PostgreSQL сохраняет данные в volume; порты по умолчанию опубликованы на loopback.
 
 ```sh
-docker compose --env-file .env -f deploy/compose.yaml up -d --wait
-```
-
-Порядок старта: PostgreSQL в Compose → явный запуск Goose из корня проекта → backend в Compose. Миграции выполняются до запуска/обновления backend; автоматического применения схемы при compose up нет. В Compose нет `build` и монтирования исходников. После изменения кода повторите отдельную команду сборки и затем команду запуска.
-
-Для registry-образа настройте `.env` по шаблону, выполните `docker compose --env-file .env -f deploy/compose.yaml pull`, затем запустите Compose.
-
-Порты backend и PostgreSQL по умолчанию опубликованы только на loopback хоста. История сохраняется в volume PostgreSQL. Остановка с сохранением данных:
-
-```sh
-docker compose --env-file .env -f deploy/compose.yaml down
-```
-
-`/healthz` проверяет backend, `/readyz` дополнительно проверяет доступность выбранной модели. Ошибка внешнего inference не отменяет сохранность чатов.
-
-## Миграции
-
-SQL находится в `migrations/`. Goose установлен через mise и запускается из корня проекта:
-
-```sh
-mise run migrate
 mise run migrate:status
 mise run migrate:down
+docker compose --env-file .env -f compose.yaml down
 ```
 
-Goose подключается к опубликованному порту PostgreSQL согласно `.env.example`. В Compose нет сервиса миграций; backend не изменяет схему БД. Откат первой миграции удаляет Core-таблицы. Первая миграция сохраняет данные установок, созданных до внедрения Goose.
+Откат первой миграции удаляет Core-таблицы. `/healthz` проверяет backend; `/readyz` также проверяет выбранную модель.
 
-## Desktop-клиент
+## Desktop
 
-Wails запускается отдельно на компьютере пользователя и обращается к backend через generated Go Connect-клиент. По умолчанию подключается к `http://127.0.0.1:8080` с токеном `dev-token`; настройка env для desktop не требуется.
+Собственная настройка — [`apps/desktop/mise.toml`](apps/desktop/mise.toml): Go `latest`, Node `latest`, pnpm и Wails3 CLI `v3.0.0`. `mise install` устанавливает CLI через `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0` с указанным GOPROXY; ручной установки CLI не требуется.
 
 ```sh
-./desktop
-./desktop --backend-url https://agent.example.com
-./desktop --backend-url https://agent.example.com --token custom-token
-./desktop --help
+cd apps/desktop
+mise trust
+mise install
+mise run doctor
+mise run dev
+mise run production
 ```
 
-Токен клиента должен совпадать с настроенным на backend. Серверные параметры остаются в `.env.example`.
+`doctor` вызывает `wails3 doctor`, `dev` — `wails3 dev`, `production` — `wails3 build`. Команды `wails3 production` у CLI нет. Минимальные `Taskfile.yml` и `build/config.yml` задают сборку frontend, бинарника и dev watcher. Production-бинарник записывается в `apps/desktop/bin/n-projects` (`n-projects.exe` на Windows).
 
-### Сборка бинарников в контейнере
+Для нативной сборки Linux нужны C compiler, pkg-config, GTK4 и WebKitGTK 6.0; Ubuntu 24.04: `sudo apt-get install build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev`. `mise install` устанавливает инструменты, системные библиотеки проверяются через `doctor`.
 
-Нужен Docker с BuildKit. Go, Node и нативные build-зависимости устанавливаются внутри `Dockerfile.desktop`. Основной `Dockerfile` backend не изменяется. Сборка рассчитана на **amd64 (x86_64)**; на ARM-хосте требуется эмуляция linux/amd64, например встроенная в Docker Desktop.
+### Сборка Linux и Windows в контейнере
 
-Из корня проекта:
+Из `apps/desktop`, нужен Docker с BuildKit:
 
 ```sh
-mise run build:desktop:linux
-mise run build:desktop:windows
+mise run build:linux
+mise run build:windows
 ```
 
-Эквивалентные Docker-команды:
+Из корня те же сборки доступны напрямую:
 
 ```sh
-docker build --platform linux/amd64 -f Dockerfile.desktop --target linux-export --output type=local,dest=dist/linux-amd64 .
-docker build --platform linux/amd64 -f Dockerfile.desktop --target windows-export --output type=local,dest=dist/windows-amd64 .
+docker build --platform linux/amd64 -f apps/desktop/Dockerfile --target linux-export --output type=local,dest=dist/linux-amd64 .
+docker build --platform linux/amd64 -f apps/desktop/Dockerfile --target windows-export --output type=local,dest=dist/windows-amd64 .
 ```
 
-Готовые файлы для распространения:
+- `dist/linux-amd64/n-projects` — динамическая Linux amd64 сборка на Ubuntu 24.04, glibc 2.39. Для запуска нужны GTK4 и WebKitGTK 6.0; Ubuntu 24.04: `sudo apt-get install libgtk-4-1 libwebkitgtk-6.0-4`.
+- `dist/windows-amd64/n-projects.exe` — Windows amd64, нужен Microsoft Edge WebView2 Runtime. Отдельное окно консоли не открывается.
 
-- `dist/linux-amd64/n-projects` — Linux amd64, собирается на Ubuntu 24.04 (glibc 2.39). На машине пользователя нужны GTK4 и WebKitGTK 6.0. Для Ubuntu 24.04: `sudo apt-get install libgtk-4-1 libwebkitgtk-6.0-4`. Совместимость с более старыми дистрибутивами не гарантируется.
-- `dist/windows-amd64/n-projects.exe` — Windows amd64 с установленным Microsoft Edge WebView2 Runtime. Собирается с GUI subsystem, без отдельного окна консоли.
+На ARM-хосте нужна эмуляция linux/amd64. Frontend встроен в бинарник; передавать пользователю исходники, Go, Node, Docker и `.env` не требуется. Клиент подключается к отдельно запущенному backend:
 
-Frontend собирается в контейнере и встраивается в executable через `go:embed`. Папку frontend, Go, Node, контейнер и `.env` конечному пользователю передавать не нужно. Бинарник не включает backend, базу данных и модель; он подключается к работающему серверу через `--backend-url`. Параметр `--token` меняет токен при необходимости. Ключи и `.env` исключены из build context.
+```sh
+./n-projects
+./n-projects --backend-url https://agent.example.com
+./n-projects --backend-url https://agent.example.com --token custom-token
+./n-projects --help
+```
 
-В GitHub Actions отдельная задача **Desktop binaries** собирает оба варианта тем же Dockerfile и сохраняет их как артефакты `desktop-linux-amd64` и `desktop-windows-amd64` на странице запуска CI. Бинарники можно скачать оттуда и передать пользователям. После распаковки Linux-артефакта из CI восстановите право запуска: `chmod +x n-projects`. Публикация GitHub Release и цифровая подпись не выполняются автоматически.
+По умолчанию URL — `http://127.0.0.1:8080`, токен — `dev-token`. Токен должен совпадать с backend.
 
-## Контракт и тесты
+CI собирает оба бинарника в Docker и сохраняет артефакты `desktop-linux-amd64` и `desktop-windows-amd64`. После скачивания Linux-артефакта: `chmod +x n-projects`.
+
+## Проверки
+
+Из корня:
 
 ```sh
 mise run generate
@@ -114,12 +122,8 @@ mise run fmt
 mise run test
 ```
 
-`generate` вызывает установленный через mise protoc и закреплённые Go/Connect plugins. Generated-код включён в Git. Тесты используют отдельные схемы PostgreSQL и проверяют streaming через Eino/Connect, историю, идемпотентность, отмену, восстановление run и Goose Up/Down. Проверка конкретной модели выполняется на вашем внешнем endpoint.
+Codegen использует `protoc`, без Buf. Тесты проверяют RPC/streaming, историю, идемпотентность, отмену, восстановление runs и Goose Up/Down. DB-тестам нужен PostgreSQL. Проверки только сервера: `mise run test` и `mise run vet` из `apps_back/server`.
 
-## Поведение Core
-
-Чаты создаются, переименовываются и удаляются после завершения активного run. Enter отправляет сообщение, Shift+Enter добавляет строку. Stop отменяет генерацию; отключение desktop/stream не отменяет серверный run. Следующее подключение получает актуальный snapshot с revision.
-
-Каждый run получает ограниченный TurnLoop с ChatModelAgent и историей из PostgreSQL. Один слот генерации, один активный run на чат. После рестарта незавершённые runs становятся `interrupted`, частичный текст сохраняется. Checkpoints, субагенты и OIDC относятся к следующим этапам.
+В Core один активный run на чат и один слот генерации. Stop отменяет run; отключение клиента не отменяет его. После рестарта незавершённые runs получают статус `interrupted`, частичный ответ сохраняется. Checkpoints, субагенты и OIDC относятся к следующим этапам.
 
 Архитектура: [ARCHITECTURE.md](ARCHITECTURE.md). План: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).

@@ -71,45 +71,39 @@ Auth, registry, orchestration и RAG query — пакеты одного backend
 
 ## 3. Структура Go-проекта и правила зависимостей
 
-Один репозиторий и один Go-модуль. `cmd` — точки входа, `internal` — закрытые пакеты по функциональности. Это распространённая Go-конвенция, а не обязательный стандарт языка.
+Monorepo с отдельными Go-модулями для desktop и backend-сервисов. Корневой модуль содержит общий protobuf-контракт и миграции. `go.work` связывает локальные модули; `replace` на корень позволяет собирать приложения отдельно с `GOWORK=off`.
 
 ```text
 n-projects/
-├── cmd/
-│   ├── server/main.go
-│   ├── ingest-worker/main.go
-│   └── desktop/main.go
-├── internal/
-│   ├── app/                 # сборка зависимостей server/worker, lifecycle
-│   ├── identity/            # OIDC identity, memberships, authorization
-│   ├── chat/                # sessions, messages, history, fork, title
-│   ├── agent/               # runs, executor, checkpoints, approvals
-│   │   ├── engine/          # адаптация Eino, графы и состояние
-│   │   ├── tools/           # каталог, policy, dispatcher, tool contracts
-│   │   └── scenarios/       # версионированные сценарии
-│   ├── documents/           # files, ingestion, chunks, retrieval
-│   │   └── extract/         # Pandoc, PDF, spreadsheets, OCR adapters
-│   ├── connectors/          # конкретные CRM/tracker-интеграции
-│   ├── speech/              # STT/TTS adapters и задания
-│   ├── desktop/             # Wails bridge, windows, event routing, OS APIs
-│   ├── rpc/                 # Connect handlers/interceptors, адаптация Protobuf
-│   ├── apiclient/           # обёртка generated Go Connect-клиента для desktop
-│   └── platform/
-│       ├── config/
-│       ├── postgres/
-│       ├── objectstore/
-│       └── telemetry/
-├── frontend/
-│   └── src/features/        # chat, tasks, documents, settings
-├── proto/nprojects/v1/      # Protobuf services и сообщения
-├── gen/go/nprojects/v1/     # generated Protobuf/Connect-код
-├── migrations/
-├── deploy/compose.yaml
-├── docs/adr/
-├── .mise.toml
-├── go.mod
-└── go.sum
+├── apps/desktop/
+│   ├── main.go
+│   ├── internal/desktop/   # Wails bridge и события
+│   ├── frontend/          # React + TypeScript + Vite
+│   ├── build/config.yml   # Wails dev watcher
+│   ├── Taskfile.yml       # минимальные задачи Wails3
+│   ├── mise.toml
+│   ├── Dockerfile         # экспорт Linux и Windows бинарников
+│   └── go.mod
+├── apps_back/server/
+│   ├── cmd/server/main.go
+│   ├── internal/
+│   │   ├── chat/          # sessions, messages, SQL
+│   │   ├── agent/         # runs, executor, отмена
+│   │   │   └── engine/    # Eino TurnLoop + ChatModelAgent
+│   │   └── rpc/           # Connect handlers/interceptors
+│   ├── mise.toml
+│   ├── Dockerfile
+│   └── go.mod
+├── proto/nprojects/v1/
+├── gen/go/nprojects/v1/
+├── migrations/            # Goose SQL, запуск из корня
+├── compose.yaml           # общий запуск всех серверных сервисов
+├── mise.toml              # codegen, миграции, общие проверки
+├── go.work
+└── go.mod                 # общий контракт и миграции
 ```
+
+Новые серверные сервисы добавляются в `apps_back/<service>` со своими `go.mod`, `mise.toml` и `Dockerfile`; запускаются через общий `compose.yaml`. Пакеты identity, documents, connectors, speech и platform добавляются внутри соответствующего сервиса по мере реализации этапов.
 
 Внутри feature-пакета достаточно `service.go`, `store.go`, `postgres.go`, `types.go` и файлов по операциям. Не создавать в каждой функции проекта одинаковые уровни `domain/application/infrastructure` или универсальные repository-интерфейсы.
 
@@ -394,24 +388,24 @@ Audit фиксирует входы, изменения прав, загрузк
 
 ## 14. Окружение, mise и эксплуатация
 
-Mise — единая точка входа для разработчика и CI. Версии системных инструментов закрепляются точно; `latest` и плавающий `lts` из черновика заменяются проверенными версиями. Go-библиотеки фиксируются в `go.mod/go.sum`, frontend — в lockfile, Wails fork — тегом или commit/pseudo-version. `mise` не заменяет package manager и production supervisor.
+Mise — единая точка входа для разработчика и CI. Каждый backend-сервис имеет собственный mise.toml с закреплёнными инструментами. Desktop имеет собственный mise.toml с Go `latest`, Node `latest` и Wails3 CLI `v3.0.0`, устанавливаемым через Go backend mise. Go-библиотеки фиксируются в `go.mod/go.sum`, frontend — в lockfile, Wails fork — тегом или commit/pseudo-version. `mise` не заменяет package manager и production supervisor.
 
-Предлагаемые задачи `.mise.toml`:
+Команды mise (общие — из корня, приложения — из своего каталога):
 
 | Команда | Назначение |
 |---|---|
-| `mise install` | Установка закреплённых инструментов |
-| `docker build -t n-projects:local .` | Отдельная сборка backend-образа |
+| `mise install` | Установка инструментов выбранного приложения |
+| `mise run build` из `apps_back/server` | Отдельная сборка backend-образа |
 | `mise run compose:up` | Запуск backend и PostgreSQL из готовых образов |
 | `mise run migrate` | Goose: явное применение SQL из migrations/ |
 | `mise run generate` / `proto:check` | protoc codegen и проверка воспроизводимости generated-кода |
-| `docker compose --env-file .env -f deploy/compose.yaml down` | Остановка контейнеров с сохранением данных |
+| `docker compose --env-file .env -f compose.yaml down` | Остановка контейнеров с сохранением данных |
 | `mise run fmt` / `lint` / `test` | Форматирование и согласованные проверки |
 | Wails desktop | Отдельный нативный клиент, подключаемый к backend |
 
-Taskfile не нужен вторым обязательным слоем. Если он понадобится для существующей автоматизации, mise остаётся внешней точкой входа. Для Linux WebKitGTK и других OS SDK, которые нельзя поставить обычным mise backend, используется штатный пакетный менеджер ОС для сборки отдельного desktop-клиента; ограничения mise не скрываются.
+В desktop минимальный Taskfile обслуживает `wails3 build` и dev watcher; mise остаётся внешней точкой входа: `doctor`, `dev`, `production`. Для Linux WebKitGTK и других OS SDK, которые нельзя поставить обычным mise backend, используется штатный пакетный менеджер ОС для сборки отдельного desktop-клиента; ограничения mise не скрываются.
 
-Dev-инфраструктура — Docker Compose. В Core запускаются backend, PostgreSQL, llama-server и desktop; inference может быть внешним процессом. На этапе 6 добавляются `ingest-worker` и object storage, а полный набор команд выше отражает целевой состав. У production ingestion worker свои лимиты и сетевой профиль. Desktop собирается в CI на целевых ОС, подписывается и получает совместимый API endpoint; набор ОС и механизм обновления ещё нужно выбрать.
+Dev-инфраструктура — Docker Compose. В Core запускаются backend, PostgreSQL, llama-server и desktop; inference может быть внешним процессом. На этапе 6 добавляются `ingest-worker` и object storage, а полный набор команд выше отражает целевой состав. У production ingestion worker свои лимиты и сетевой профиль. Desktop собирается в CI через Dockerfile для Linux и Windows amd64. Linux использует динамическую линковку GTK4/WebKitGTK. Подпись и обновление — отдельные будущие задачи.
 
 При SIGTERM backend прекращает приём новых jobs, завершает или безопасно прерывает активные runs, сохраняет состояние и освобождает ресурсы. Ожидающие подтверждения runs остаются в БД. Миграции выполняются отдельной операцией перед запуском версии; обновление графов не должно незаметно делать pending checkpoints нечитаемыми.
 
@@ -454,7 +448,7 @@ Dev-инфраструктура — Docker Compose. В Core запускают�
 
 | Измеримая причина | Следующий шаг |
 |---|---|
-| Agent execution увеличивает задержку RPC или нужен независимый deploy | Выделить `cmd/agent-worker`, оставив текущие доменные пакеты и PostgreSQL queue |
+| Agent execution увеличивает задержку RPC или нужен независимый deploy | Выделить `apps_back/agent-worker`, оставив текущие доменные пакеты и PostgreSQL queue |
 | Ingestion упирается в CPU/OCR | Добавить экземпляры ingestion worker с тем же контрактом lease |
 | Inference упирается в GPU/очередь | Масштабировать serving и разделить профили chat/embedding/speech |
 | Векторный индекс заметно ухудшает работу основной БД | Оценить отдельный vector store на реальных запросах и ACL |
@@ -510,6 +504,6 @@ Dev-инфраструктура — Docker Compose. В Core запускают�
 
 Миграции БД выполняются Goose из `migrations/` отдельной mise-задачей. Генерация ConnectRPC выполняется `protoc`, установленным через mise; Buf не используется.
 
-Backend во всех режимах запускается в контейнере через Compose. Образ собирается отдельной командой Dockerfile; `build` в Compose отсутствует. Goose запускается из корня проекта через `mise run migrate` перед запуском backend; отдельного сервиса миграций в Compose нет. Wails остаётся отдельным клиентом. Локальные dev/build-задачи и scripts удалены.
+Backend во всех режимах запускается в контейнере через Compose. Образ собирается отдельной командой Dockerfile; `build` в Compose отсутствует. Goose запускается из корня проекта через `mise run migrate` перед запуском backend; отдельного сервиса миграций в Compose нет. Wails остаётся отдельным клиентом. У backend нет локальных dev/build-команд: сборка идёт через Dockerfile каждого сервиса. Desktop допускает нативные Wails3 doctor/dev/production и сборку в контейнере. Каталога scripts нет.
 
 Runtime backend — distroless static-debian12:nonroot; образ содержит только серверный бинарник поверх runtime. Миграции остаются в migrations/ и применяются с хоста отдельной mise-задачей.

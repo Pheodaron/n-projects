@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
-	"github.com/Pheodaron/n-projects/internal/chat"
+	"github.com/Pheodaron/n-projects/apps_back/server/internal/chat"
 	"log/slog"
 	"strings"
 	"sync"

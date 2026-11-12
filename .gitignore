@@ -6,19 +6,18 @@
 .data/
 models/
 bin/
-frontend/node_modules/
-frontend/.vite/
+node_modules/
+.vite/
+.task/
 *.log
 *.test
 coverage.out
 .DS_Store
-!frontend/dist/*
-!frontend/dist/.gitkeep
 __pycache__/
 *.pyc
 /server
 /desktop
 
-frontend/dist/*
-!frontend/dist/.gitkeep
+apps/desktop/frontend/dist/*
+!apps/desktop/frontend/dist/.gitkeep
 /dist/

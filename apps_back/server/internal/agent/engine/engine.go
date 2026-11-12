@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Pheodaron/n-projects/internal/agent"
+	"github.com/Pheodaron/n-projects/apps_back/server/internal/agent"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
 )
