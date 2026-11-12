@@ -11,5 +11,4 @@ node_modules
 **/bin
 bin
 dist
-apps_back
 *.log

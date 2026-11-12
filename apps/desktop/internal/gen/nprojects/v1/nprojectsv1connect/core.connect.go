@@ -8,7 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/Pheodaron/n-projects/gen/go/nprojects/v1"
+	v1 "github.com/Pheodaron/n-projects/apps/desktop/internal/gen/nprojects/v1"
 	http "net/http"
 	strings "strings"
 )

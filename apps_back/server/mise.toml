@@ -2,8 +2,7 @@
 go = "1.27.3"
 
 [tasks.build]
-dir = "../.."
-run = "docker build -f apps_back/server/Dockerfile -t n-projects:local ."
+run = "docker build -t n-projects:local ."
 
 [tasks.test]
 run = "go test -race ./..."
@@ -13,3 +12,15 @@ run = "go vet ./..."
 
 [tasks.fmt]
 run = "gofmt -w cmd internal"
+
+[tasks.generate]
+run = """
+protoc \
+    --proto_path=../../proto \
+    --go_out=internal/gen \
+    --go_opt=paths=source_relative \
+    --go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps_back/server/internal/gen/nprojects/v1;nprojectsv1" \
+    --connect-go_out=internal/gen \
+    --connect-go_opt=paths=source_relative \
+    --connect-go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps_back/server/internal/gen/nprojects/v1;nprojectsv1" nprojects/v1/core.proto
+"""

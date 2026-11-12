@@ -2,7 +2,6 @@
 .env
 .env.*
 .github
-apps
 node_modules
 bin
 .tools

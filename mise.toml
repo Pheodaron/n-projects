@@ -9,23 +9,31 @@ protoc = "32.1"
 _.file = ".env"
 
 [tasks.generate]
-run = """
+run = [
+"""
 protoc \
     --proto_path=proto \
-    --go_out=gen/go \
+    --go_out=apps/desktop/internal/gen \
     --go_opt=paths=source_relative \
-    --connect-go_out=gen/go \
-    --connect-go_opt=paths=source_relative proto/nprojects/v1/core.proto
+    --go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps/desktop/internal/gen/nprojects/v1;nprojectsv1" \
+    --connect-go_out=apps/desktop/internal/gen \
+    --connect-go_opt=paths=source_relative \
+    --connect-go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps/desktop/internal/gen/nprojects/v1;nprojectsv1" nprojects/v1/core.proto
+""",
 """
+protoc \
+    --proto_path=proto \
+    --go_out=apps_back/server/internal/gen \
+    --go_opt=paths=source_relative \
+    --go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps_back/server/internal/gen/nprojects/v1;nprojectsv1" \
+    --connect-go_out=apps_back/server/internal/gen \
+    --connect-go_opt=paths=source_relative \
+    --connect-go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps_back/server/internal/gen/nprojects/v1;nprojectsv1" nprojects/v1/core.proto
+"""
+]
 
 [tasks."compose:up"]
 run = "docker compose --env-file .env -f compose.yaml up -d --wait"
-
-[tasks.test]
-run = "go test -race ./... ./apps_back/server/... ./apps/desktop/internal/..."
-
-[tasks.fmt]
-run = "gofmt -w apps/desktop apps_back/server migrations"
 
 [tasks.migrate]
 env = { GOOSE_DRIVER = 'postgres', GOOSE_DBSTRING = '{{env.DATABASE_URL}}' }

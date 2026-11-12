@@ -7,10 +7,10 @@ import (
 	"github.com/Pheodaron/n-projects/apps_back/server/internal/agent"
 	"github.com/Pheodaron/n-projects/apps_back/server/internal/agent/engine"
 	"github.com/Pheodaron/n-projects/apps_back/server/internal/chat"
+	pb "github.com/Pheodaron/n-projects/apps_back/server/internal/gen/nprojects/v1"
+	pc "github.com/Pheodaron/n-projects/apps_back/server/internal/gen/nprojects/v1/nprojectsv1connect"
 	"github.com/Pheodaron/n-projects/apps_back/server/internal/rpc"
-	pb "github.com/Pheodaron/n-projects/gen/go/nprojects/v1"
-	pc "github.com/Pheodaron/n-projects/gen/go/nprojects/v1/nprojectsv1connect"
-	"github.com/Pheodaron/n-projects/migrations"
+	"github.com/Pheodaron/n-projects/apps_back/server/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"io"
 	"net/http"
@@ -51,7 +51,7 @@ func TestCoreConnectPostgresTurnLoop(t *testing.T) {
 	}
 	defer pool.Close()
 	store := chat.NewStore(pool)
-	if e = migrations.Up(ctx, pool); e != nil {
+	if e = testdb.Up(ctx, pool); e != nil {
 		t.Fatal(e)
 	}
 	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

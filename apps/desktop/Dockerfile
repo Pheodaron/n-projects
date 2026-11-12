@@ -2,14 +2,13 @@
 FROM node:24.22.1-bookworm-slim AS frontend-builder
 WORKDIR /frontend
 RUN npm install --global pnpm@11.25.0
-COPY apps/desktop/frontend/package.json apps/desktop/frontend/pnpm-lock.yaml apps/desktop/frontend/pnpm-workspace.yaml ./
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/pnpm/store \
     pnpm install --frozen-lockfile --store-dir /pnpm/store
-COPY apps/desktop/frontend/ ./
+COPY frontend/ ./
 RUN pnpm build
 
 FROM golang:1.27.3-bookworm AS go-sdk
-ENV GOWORK=off
 
 FROM ubuntu:24.04 AS linux-builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -17,10 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=go-sdk /usr/local/go /usr/local/go
 ENV PATH="/usr/local/go/bin:${PATH}"
-ENV GOWORK=off
 WORKDIR /src
 COPY . .
-WORKDIR /src/apps/desktop
 COPY --from=frontend-builder /frontend/dist ./frontend/dist
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
@@ -30,7 +27,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM go-sdk AS windows-builder
 WORKDIR /src
 COPY . .
-WORKDIR /src/apps/desktop
 COPY --from=frontend-builder /frontend/dist ./frontend/dist
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \

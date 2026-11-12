@@ -14,9 +14,28 @@ run = "wails3 dev"
 run = "wails3 build"
 
 [tasks."build:linux"]
-dir = "../.."
-run = "docker build --platform linux/amd64 -f apps/desktop/Dockerfile --target linux-export --output type=local,dest=dist/linux-amd64 ."
+run = "docker build --platform linux/amd64 --target linux-export --output type=local,dest=../../dist/linux-amd64 ."
 
 [tasks."build:windows"]
-dir = "../.."
-run = "docker build --platform linux/amd64 -f apps/desktop/Dockerfile --target windows-export --output type=local,dest=dist/windows-amd64 ."
+run = "docker build --platform linux/amd64 --target windows-export --output type=local,dest=../../dist/windows-amd64 ."
+
+[tasks.test]
+run = "go test -race ./internal/..."
+
+[tasks.vet]
+run = "go vet ./internal/..."
+
+[tasks.fmt]
+run = "gofmt -w main.go internal frontend/embed.go"
+
+[tasks.generate]
+run = """
+protoc \
+    --proto_path=../../proto \
+    --go_out=internal/gen \
+    --go_opt=paths=source_relative \
+    --go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps/desktop/internal/gen/nprojects/v1;nprojectsv1" \
+    --connect-go_out=internal/gen \
+    --connect-go_opt=paths=source_relative \
+    --connect-go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps/desktop/internal/gen/nprojects/v1;nprojectsv1" nprojects/v1/core.proto
+"""

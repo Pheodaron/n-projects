@@ -1,13 +1,14 @@
-package migrations_test
+package testdb_test
 
 import (
 	"context"
 	"crypto/rand"
+	"io/fs"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/Pheodaron/n-projects/migrations"
+	"github.com/Pheodaron/n-projects/apps_back/server/internal/testdb"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -40,7 +41,7 @@ func TestAdoptExistingCoreAndRollback(t *testing.T) {
 	}
 	defer pool.Close()
 	// Reproduce the schema left by the pre-Goose Core, without a Goose version table.
-	sql, err := migrations.Files.ReadFile("00001_core.sql")
+	sql, err := fs.ReadFile(testdb.Files, "00001_core.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +52,7 @@ func TestAdoptExistingCoreAndRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
-		if err = migrations.Up(ctx, pool); err != nil {
+		if err = testdb.Up(ctx, pool); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -61,7 +62,7 @@ func TestAdoptExistingCoreAndRollback(t *testing.T) {
 	}
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations.Files)
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, testdb.Files)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +73,7 @@ func TestAdoptExistingCoreAndRollback(t *testing.T) {
 	if err = pool.QueryRow(ctx, `SELECT to_regclass('sessions') IS NULL AND to_regclass('runs') IS NULL AND to_regclass('receipts') IS NULL`).Scan(&missing); err != nil || !missing {
 		t.Fatalf("down: %v %v", missing, err)
 	}
-	if err = migrations.Up(ctx, pool); err != nil {
+	if err = testdb.Up(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
 }

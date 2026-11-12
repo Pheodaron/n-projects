@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package nprojects.v1;
 
-option go_package = "github.com/Pheodaron/n-projects/gen/go/nprojects/v1;nprojectsv1";
-
 // SessionService manages the persisted conversation history.
 service SessionService {
   rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);

@@ -1,18 +1,17 @@
-// Package migrations exposes the same Goose SQL migrations used by the CLI to
-// integration tests. Production migration is an explicit mise task.
-package migrations
+// Package testdb applies the root Goose SQL migrations in integration tests.
+package testdb
 
 import (
 	"context"
-	"embed"
+	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 )
 
-//go:embed *.sql
-var Files embed.FS
+// Go tests run from internal/<package>; the shared SQL stays at repository root.
+var Files = os.DirFS("../../../../migrations")
 
 func Up(ctx context.Context, pool *pgxpool.Pool) error {
 	db := stdlib.OpenDBFromPool(pool)

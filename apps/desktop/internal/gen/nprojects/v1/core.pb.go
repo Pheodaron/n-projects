@@ -1345,7 +1345,7 @@ const file_nprojects_v1_core_proto_rawDesc = "" +
 	"\bStartRun\x12\x1d.nprojects.v1.StartRunRequest\x1a\x1e.nprojects.v1.StartRunResponse\x12C\n" +
 	"\x06GetRun\x12\x1b.nprojects.v1.GetRunRequest\x1a\x1c.nprojects.v1.GetRunResponse\x12L\n" +
 	"\tCancelRun\x12\x1e.nprojects.v1.CancelRunRequest\x1a\x1f.nprojects.v1.CancelRunResponse\x12K\n" +
-	"\bWatchRun\x12\x1d.nprojects.v1.WatchRunRequest\x1a\x1e.nprojects.v1.WatchRunResponse0\x01BAZ?github.com/Pheodaron/n-projects/gen/go/nprojects/v1;nprojectsv1b\x06proto3"
+	"\bWatchRun\x12\x1d.nprojects.v1.WatchRunRequest\x1a\x1e.nprojects.v1.WatchRunResponse0\x01b\x06proto3"
 
 var (
 	file_nprojects_v1_core_proto_rawDescOnce sync.Once

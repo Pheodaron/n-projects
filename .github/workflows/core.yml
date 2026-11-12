@@ -12,7 +12,7 @@ jobs:
         with:
           version: '2026.11.3'
       - name: Verify generated RPC contract
-        run: mise run generate && git diff --exit-code -- gen/go
+        run: mise run generate && git diff --exit-code -- apps/desktop/internal/gen apps_back/server/internal/gen
       - name: Build backend image
         working-directory: apps_back/server
         run: mise trust && mise run build
@@ -24,8 +24,11 @@ jobs:
         run: mise run compose:up
       - name: Verify container health
         run: curl --fail --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/healthz
-      - run: mise run test
-      - run: mise exec -- go vet ./apps_back/server/... ./apps/desktop/internal/... ./migrations
+      - name: Test backend
+        working-directory: apps_back/server
+        run: mise run test && mise run vet
+      - name: Test desktop bridge
+        run: mise exec -- go -C apps/desktop test -race ./internal/... && mise exec -- go -C apps/desktop vet ./internal/...
       - name: Compose logs
         if: failure()
         run: docker compose --env-file .env -f compose.yaml logs
@@ -43,7 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build desktop binary
-        run: docker build --platform linux/amd64 -f apps/desktop/Dockerfile --target ${{ matrix.os }}-export --output type=local,dest=dist/${{ matrix.os }}-amd64 .
+        run: docker build --platform linux/amd64 --target ${{ matrix.os }}-export --output type=local,dest=dist/${{ matrix.os }}-amd64 apps/desktop
       - name: Inspect binary format
         run: file dist/${{ matrix.os }}-amd64/n-projects*
       - uses: actions/upload-artifact@v6

@@ -91,6 +91,7 @@ UI подключается по мере готовности API, а не от
 apps/desktop/
   main.go
   internal/desktop/       # Wails bridge и события
+  internal/gen/           # локальный generated Protobuf/Connect-код
   frontend/               # React + TypeScript + Vite
   build/config.yml        # Wails dev watcher
   Taskfile.yml
@@ -103,16 +104,16 @@ apps_back/server/
   internal/agent/         # Run, executor, контекст и отмена
   internal/agent/engine/  # Eino TurnLoop + ChatModelAgent
   internal/rpc/           # Connect handlers/interceptors
+  internal/gen/           # локальный generated Protobuf/Connect-код
+  internal/testdb/        # Goose-хелперы и тесты корневых SQL-миграций
   mise.toml               # сборка образа и проверки сервера
   Dockerfile
   go.mod
 proto/nprojects/v1/       # общий контракт
-gen/go/nprojects/v1/     # generated Protobuf и Connect-код
 migrations/              # Goose SQL, применение из корня
 compose.yaml             # общий Compose для apps_back и PostgreSQL
-mise.toml                # общие инструменты, codegen, миграции и проверки
-go.work
-go.mod                   # общий контракт и миграции
+mise.toml                # общие инструменты, codegen и миграции
+docs/                    # архитектура и план реализации
 .env.example
 README.md
 ```

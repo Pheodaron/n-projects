@@ -6,14 +6,13 @@ Monorepo: Wails3 desktop-клиент, Go backend с ConnectRPC и Eino TurnLoop
 apps/desktop/         Wails3-приложение: main.go, internal/, frontend/, mise.toml, Dockerfile
 apps_back/server/     Backend: cmd/server/, internal/, mise.toml, Dockerfile
 proto/                Общий protobuf-контракт
-gen/go/               Generated Protobuf и ConnectRPC
-migrations/           SQL-миграции Goose и проверки
+migrations/           SQL-миграции Goose
 compose.yaml          Общий запуск backend-сервисов и PostgreSQL
-mise.toml             Общие инструменты, codegen, миграции и тесты
-go.work               Связь трёх Go-модулей без публикации пакетов
+mise.toml             Общие инструменты, codegen и миграции
+docs/                 Архитектура и план реализации
 ```
 
-Корневой Go-модуль содержит общий RPC-контракт и миграции. Desktop и server имеют собственные `go.mod/go.sum`, закрытые `internal/` и зависимости.
+Desktop и server — самостоятельные Go-проекты со своими `go.mod/go.sum`, зависимостями и Docker build context. Общего Go-модуля и workspace нет. Каждый проект хранит собственный generated-код в `internal/gen`; источник контракта — общий `proto/`. Для сборки достаточно каталога приложения; для повторной генерации кода нужен общий `.proto`, для DB-тестов сервера — корневая `migrations/`.
 
 ## Backend
 
@@ -37,10 +36,10 @@ mise run build
 cd ../..
 ```
 
-Сборка использует корень репозитория как Docker context. Эквивалентная команда из корня:
+Сборка использует каталог сервиса как Docker context. Эквивалентная команда из корня:
 
 ```sh
-docker build -f apps_back/server/Dockerfile -t n-projects:local .
+docker build -t n-projects:local apps_back/server
 ```
 
 Runtime — `gcr.io/distroless/static-debian12:nonroot`, в образ копируется только backend-бинарник. Frontend, Wails, Goose и Go toolchain в runtime не входят.
@@ -92,8 +91,8 @@ mise run build:windows
 Из корня те же сборки доступны напрямую:
 
 ```sh
-docker build --platform linux/amd64 -f apps/desktop/Dockerfile --target linux-export --output type=local,dest=dist/linux-amd64 .
-docker build --platform linux/amd64 -f apps/desktop/Dockerfile --target windows-export --output type=local,dest=dist/windows-amd64 .
+docker build --platform linux/amd64 --target linux-export --output type=local,dest=dist/linux-amd64 apps/desktop
+docker build --platform linux/amd64 --target windows-export --output type=local,dest=dist/windows-amd64 apps/desktop
 ```
 
 - `dist/linux-amd64/n-projects` — динамическая Linux amd64 сборка на Ubuntu 24.04, glibc 2.39. Для запуска нужны GTK4 и WebKitGTK 6.0; Ubuntu 24.04: `sudo apt-get install libgtk-4-1 libwebkitgtk-6.0-4`.
@@ -114,16 +113,19 @@ CI собирает оба бинарника в Docker и сохраняет а
 
 ## Проверки
 
-Из корня:
+В каталоге нужного приложения (`apps/desktop` или `apps_back/server`):
 
 ```sh
 mise run generate
 mise run fmt
 mise run test
+mise run vet
 ```
 
-Codegen использует `protoc`, без Buf. Тесты проверяют RPC/streaming, историю, идемпотентность, отмену, восстановление runs и Goose Up/Down. DB-тестам нужен PostgreSQL. Проверки только сервера: `mise run test` и `mise run vet` из `apps_back/server`.
+`generate` обновляет только generated-код выбранного приложения. Корневая `mise run generate` обновляет обе копии из одного `.proto`, через `protoc`, без Buf. CI проверяет обе копии на соответствие исходному контракту.
+
+Серверные тесты проверяют RPC/streaming, историю, идемпотентность, отмену, восстановление runs и Goose Up/Down. SQL берётся из корневой `migrations/`, Go-хелперы тестов находятся в `apps_back/server/internal/testdb`. DB-тестам нужен PostgreSQL. Desktop-задачи `test` и `vet` проверяют пакеты `internal/`; полная сборка Wails проверяется отдельно.
 
 В Core один активный run на чат и один слот генерации. Stop отменяет run; отключение клиента не отменяет его. После рестарта незавершённые runs получают статус `interrupted`, частичный ответ сохраняется. Checkpoints, субагенты и OIDC относятся к следующим этапам.
 
-Архитектура: [ARCHITECTURE.md](ARCHITECTURE.md). План: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+Архитектура: [ARCHITECTURE.md](docs/ARCHITECTURE.md). План: [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).

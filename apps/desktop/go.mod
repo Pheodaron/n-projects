@@ -4,7 +4,6 @@ go 1.27.3
 
 require (
 	connectrpc.com/connect v1.18.1
-	github.com/Pheodaron/n-projects v0.0.0
 	github.com/wailsapp/wails/v3 v3.0.0
 	google.golang.org/protobuf v1.36.6
 )
@@ -18,7 +17,5 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 )
-
-replace github.com/Pheodaron/n-projects => ../..
 
 replace github.com/wailsapp/wails/v3 => github.com/Piloswine1/wails/v3 v3.0.0-20261029002042-1d1c0c36d0bc

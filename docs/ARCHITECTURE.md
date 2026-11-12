@@ -15,7 +15,7 @@
 | Материал | Как используется |
 |---|---|
 | Запрос пользователя | Определяет требуемое поведение, объём работ и изменения проекта |
-| [AGENTS.md](AGENTS.md) | Инженерные правила: простота, идиоматичный Go, feature-first внутри `internal`, управление инструментами и командами через mise |
+| [AGENTS.md](../AGENTS.md) | Инженерные правила: простота, идиоматичный Go, feature-first внутри `internal`, управление инструментами и командами через mise |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Объём и критерии готовности каждого этапа |
 | Этот документ | Целевая архитектура; функции последующих этапов не считаются уже реализованными |
 
@@ -69,13 +69,14 @@ Auth, registry, orchestration и RAG query — пакеты одного backend
 
 ## 3. Структура Go-проекта и правила зависимостей
 
-Monorepo с отдельными Go-модулями для desktop и backend-сервисов. Корневой модуль содержит общий protobuf-контракт и миграции. `go.work` связывает локальные модули; `replace` на корень позволяет собирать приложения отдельно с `GOWORK=off`.
+Monorepo с независимыми Go-проектами в apps/ и apps_back/. У каждого приложения собственные go.mod/go.sum и Docker build context; межпроектных Go-импортов и локальных replace нет. Общий proto/ задаёт сетевой контракт; protoc генерирует отдельный Go-код в internal/gen каждого приложения. SQL-миграции остаются в корневой migrations/, а их Go-хелперы и тесты находятся внутри сервера.
 
 ```text
 n-projects/
 ├── apps/desktop/
 │   ├── main.go
 │   ├── internal/desktop/   # Wails bridge и события
+│   ├── internal/gen/       # локальные Protobuf/Connect bindings
 │   ├── frontend/          # React + TypeScript + Vite
 │   ├── build/config.yml   # Wails dev watcher
 │   ├── Taskfile.yml       # минимальные задачи Wails3
@@ -88,17 +89,17 @@ n-projects/
 │   │   ├── chat/          # sessions, messages, SQL
 │   │   ├── agent/         # runs, executor, отмена
 │   │   │   └── engine/    # Eino TurnLoop + ChatModelAgent
-│   │   └── rpc/           # Connect handlers/interceptors
+│   │   ├── rpc/           # Connect handlers/interceptors
+│   │   ├── gen/           # локальные Protobuf/Connect bindings
+│   │   └── testdb/        # Goose-хелперы и тесты миграций
 │   ├── mise.toml
 │   ├── Dockerfile
 │   └── go.mod
 ├── proto/nprojects/v1/
-├── gen/go/nprojects/v1/
 ├── migrations/            # Goose SQL, запуск из корня
 ├── compose.yaml           # общий запуск всех серверных сервисов
-├── mise.toml              # codegen, миграции, общие проверки
-├── go.work
-└── go.mod                 # общий контракт и миграции
+├── mise.toml              # общий codegen и миграции
+└── docs/                  # архитектура и план
 ```
 
 Новые серверные сервисы добавляются в `apps_back/<service>` со своими `go.mod`, `mise.toml` и `Dockerfile`; запускаются через общий `compose.yaml`. Пакеты identity, documents, connectors, speech и platform добавляются внутри соответствующего сервиса по мере реализации этапов.
@@ -270,7 +271,7 @@ Go bridge предоставляет Webview небольшое прикладн
 
 ## 9. ConnectRPC-контракт
 
-Источник контракта — Protobuf package `nprojects.v1` в `proto/nprojects/v1`. protoc и закреплённые plugins генерируют Go messages, Connect handlers и Go-клиент. `mise run generate` воспроизводит код, `mise run proto:check` проверяет воспроизводимость generated-кода. Для внутренних команд не поддерживается параллельный REST/OpenAPI-контракт.
+Источник контракта — Protobuf package `nprojects.v1` в `proto/nprojects/v1`. protoc и закреплённые plugins генерируют Go messages, Connect handlers и Go-клиент отдельно в internal/gen каждого приложения; import path задаётся protoc mapping-опциями в его mise.toml. `mise run generate` воспроизводит код, `mise run proto:check` проверяет воспроизводимость generated-кода. Для внутренних команд не поддерживается параллельный REST/OpenAPI-контракт.
 
 | Service.Method | Вид | Назначение и этап |
 |---|---|---|
