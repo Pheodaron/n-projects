@@ -8,7 +8,7 @@ apps_back/server/     Backend: cmd/server/, internal/, mise.toml, Dockerfile
 proto/                Общий protobuf-контракт
 migrations/           SQL-миграции Goose
 compose.yaml          Общий запуск backend-сервисов и PostgreSQL
-mise.toml             Общие инструменты, codegen и миграции
+mise.toml             Общие инструменты и миграции
 docs/                 Архитектура и план реализации
 ```
 
@@ -122,7 +122,7 @@ mise run test
 mise run vet
 ```
 
-`generate` обновляет только generated-код выбранного приложения. Корневая `mise run generate` обновляет обе копии из одного `.proto`, через `protoc`, без Buf. CI проверяет обе копии на соответствие исходному контракту.
+`generate` обновляет только generated-код выбранного приложения из общего `.proto`, через `protoc`, без Buf. Protoc, Go/Connect plugins и задача генерации определены в `mise.toml` каждого приложения. CI запускает эти задачи отдельно и проверяет generated-код на соответствие исходному контракту.
 
 Серверные тесты проверяют RPC/streaming, историю, идемпотентность, отмену, восстановление runs и Goose Up/Down. SQL берётся из корневой `migrations/`, Go-хелперы тестов находятся в `apps_back/server/internal/testdb`. DB-тестам нужен PostgreSQL. Desktop-задачи `test` и `vet` проверяют пакеты `internal/`; полная сборка Wails проверяется отдельно.
 

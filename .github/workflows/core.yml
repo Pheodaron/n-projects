@@ -11,8 +11,20 @@ jobs:
       - uses: jdx/mise-action@v4
         with:
           version: '2026.11.3'
-      - name: Verify generated RPC contract
-        run: mise run generate && git diff --exit-code -- apps/desktop/internal/gen apps_back/server/internal/gen
+      - name: Verify backend RPC codegen
+        working-directory: apps_back/server
+        run: |
+          mise trust
+          mise install protoc go:google.golang.org/protobuf/cmd/protoc-gen-go go:connectrpc.com/connect/cmd/protoc-gen-connect-go
+          mise run --skip-tools generate
+          git diff --exit-code -- internal/gen
+      - name: Verify desktop RPC codegen
+        working-directory: apps/desktop
+        run: |
+          mise trust
+          mise install protoc go:google.golang.org/protobuf/cmd/protoc-gen-go go:connectrpc.com/connect/cmd/protoc-gen-connect-go
+          mise run --skip-tools generate
+          git diff --exit-code -- internal/gen
       - name: Build backend image
         working-directory: apps_back/server
         run: mise trust && mise run build

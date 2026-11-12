@@ -98,7 +98,7 @@ n-projects/
 ├── proto/nprojects/v1/
 ├── migrations/            # Goose SQL, запуск из корня
 ├── compose.yaml           # общий запуск всех серверных сервисов
-├── mise.toml              # общий codegen и миграции
+├── mise.toml              # общие инструменты и миграции
 └── docs/                  # архитектура и план
 ```
 
@@ -271,7 +271,7 @@ Go bridge предоставляет Webview небольшое прикладн
 
 ## 9. ConnectRPC-контракт
 
-Источник контракта — Protobuf package `nprojects.v1` в `proto/nprojects/v1`. protoc и закреплённые plugins генерируют Go messages, Connect handlers и Go-клиент отдельно в internal/gen каждого приложения; import path задаётся protoc mapping-опциями в его mise.toml. `mise run generate` воспроизводит код, `mise run proto:check` проверяет воспроизводимость generated-кода. Для внутренних команд не поддерживается параллельный REST/OpenAPI-контракт.
+Источник контракта — Protobuf package `nprojects.v1` в `proto/nprojects/v1`. protoc и закреплённые plugins генерируют Go messages, Connect handlers и Go-клиент отдельно в internal/gen каждого приложения; import path задаётся protoc mapping-опциями в его mise.toml. `mise run generate` из каталога приложения воспроизводит его код, `mise run proto:check` проверяет воспроизводимость generated-кода. Для внутренних команд не поддерживается параллельный REST/OpenAPI-контракт.
 
 | Service.Method | Вид | Назначение и этап |
 |---|---|---|
@@ -397,7 +397,7 @@ Mise — единая точка входа для разработчика и C
 | `mise run build` из `apps_back/server` | Отдельная сборка backend-образа |
 | `mise run compose:up` | Запуск backend и PostgreSQL из готовых образов |
 | `mise run migrate` | Goose: явное применение SQL из migrations/ |
-| `mise run generate` / `proto:check` | protoc codegen и проверка воспроизводимости generated-кода |
+| `mise run generate` из каталога приложения | protoc codegen и проверка воспроизводимости generated-кода в CI |
 | `docker compose --env-file .env -f compose.yaml down` | Остановка контейнеров с сохранением данных |
 | `mise run fmt` / `lint` / `test` | Форматирование и согласованные проверки |
 | Wails desktop | Отдельный нативный клиент, подключаемый к backend |

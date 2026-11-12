@@ -15,7 +15,7 @@
 ## Структура и команды проекта
 
 - Соблюдать простоту, идиоматичный Go и feature-first структуру внутри internal.
-- Репозиторий — monorepo: клиенты в apps/, серверные сервисы в apps_back/. У каждого приложения свой mise.toml, Go-модуль и Docker build context; у каждого backend-сервиса свой Dockerfile. В корне нет Go-модуля и workspace; приложения не используют локальные replace друг на друга. Общий proto/ генерируется в internal/gen каждого приложения.
+- Репозиторий — monorepo: клиенты в apps/, серверные сервисы в apps_back/. У каждого приложения свой mise.toml, Go-модуль и Docker build context; у каждого backend-сервиса свой Dockerfile. В корне нет Go-модуля и workspace; приложения не используют локальные replace друг на друга. Общий proto/ генерируется в internal/gen каждого приложения; generate, protoc и Go/Connect plugins определяются только в mise.toml самого приложения.
 - Общие инструменты и команды определять в корневом mise.toml; команды приложения — в его mise.toml. Desktop использует Wails3 CLI, устанавливаемый mise через go install.
 - Backend-сервисы запускать через общий compose.yaml из корня; каждый образ собирать отдельно через Dockerfile сервиса, без build в Compose. Wails остаётся отдельным клиентом.
 - В корне оставлять только README.md и AGENTS.md из Markdown-документов; остальные Markdown-документы хранить в docs/.

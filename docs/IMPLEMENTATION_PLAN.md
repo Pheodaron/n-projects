@@ -112,7 +112,7 @@ apps_back/server/
 proto/nprojects/v1/       # общий контракт
 migrations/              # Goose SQL, применение из корня
 compose.yaml             # общий Compose для apps_back и PostgreSQL
-mise.toml                # общие инструменты, codegen и миграции
+mise.toml                # общие инструменты и миграции
 docs/                    # архитектура и план реализации
 .env.example
 README.md
@@ -131,7 +131,7 @@ Registry, documents, speech и ingestion worker появляются на сво
 - **Простой контекст.** System prompt и последние завершённые ходы текущего чата в пределах лимита модели; незавершённые ответы не выдаются за полные. При отсечении старой истории UI сообщает об ограничении; слишком большое одиночное сообщение возвращает понятную ошибку. Автоматическое summary добавляется на этапе 8.
 - **Простая защита повторов.** Создание пользовательского сообщения и Run выполняется одной транзакцией; `request_id` в изменяющем Protobuf-запросе служит ключом идемпотентности и не допускает дубля при сетевом повторе. Удаление чата с активным run возвращает Connect `FailedPrecondition` до его остановки.
 
-Контракт Core: `SessionService.CreateSession/ListSessions/GetSession/UpdateSession/DeleteSession/ListMessages` и `RunService.StartRun/GetRun/CancelRun/WatchRun`. Все методы unary, кроме `WatchRun` с server streaming. Источник контракта — `.proto`; protoc выполняет codegen; проверка proto:check обнаруживает расхождения generated-кода с коммитом. Go-клиент desktop и Go handlers генерируются вместе. Отдельный TypeScript Connect-клиент не нужен: Webview использует локальные bindings.
+Контракт Core: `SessionService.CreateSession/ListSessions/GetSession/UpdateSession/DeleteSession/ListMessages` и `RunService.StartRun/GetRun/CancelRun/WatchRun`. Все методы unary, кроме `WatchRun` с server streaming. Источник контракта — `.proto`; protoc выполняет codegen; проверка proto:check обнаруживает расхождения generated-кода с коммитом. Go-клиент desktop и Go handlers генерируются каждый в своём проекте из общего `.proto`. Отдельный TypeScript Connect-клиент не нужен: Webview использует локальные bindings.
 
 Доменный `Run.status=failed` приходит в типизированном snapshot; transport/RPC error приходит как Connect error. `Unavailable` допускает reconnect подписки, `Unauthenticated/PermissionDenied` требует обновления доступа, `ResourceExhausted` отображает занятость, `InvalidArgument` — ошибку ввода. Повтор изменяющего RPC использует тот же `request_id`; слепой автоматический retry всех команд не включается.
 
@@ -159,7 +159,7 @@ Stop гарантирует прекращение локального чтен
 | `docker build -t n-projects:local .` | Собрать минимальный multi-stage образ backend |
 | `mise run compose:up` | Запустить backend и PostgreSQL без сборки |
 | `mise run migrate` / `migrate:status` / `migrate:down` | Операторские задачи Goose; URL должен быть доступен с хоста |
-| `mise run generate` | Сгенерировать Protobuf и Go Connect-код через protoc |
+| `mise run generate` из каталога приложения | Сгенерировать Protobuf и Go Connect-код приложения через protoc |
 | `mise run test` / `fmt` | Проверки и форматирование |
 
 README описывает первый запуск, получение выбранной модели, конфигурацию и подключение desktop к удалённому backend. При внешнем llama-server launcher пропускается; backend использует заданный URL. Компиляция llama.cpp и нативные SDK выполняются соответствующими средствами сборки, вызванными из mise-задач.

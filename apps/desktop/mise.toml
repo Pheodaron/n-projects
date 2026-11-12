@@ -3,6 +3,9 @@ go = "latest"
 node = "latest"
 pnpm = "11.25.0"
 "go:github.com/wailsapp/wails/v3/cmd/wails3" = { version = "v3.0.0", install_env = { GOPROXY = "https://goproxy.io,direct" } }
+protoc = "32.1"
+"go:google.golang.org/protobuf/cmd/protoc-gen-go" = "1.36.6"
+"go:connectrpc.com/connect/cmd/protoc-gen-connect-go" = "1.18.1"
 
 [tasks.doctor]
 run = "wails3 doctor"

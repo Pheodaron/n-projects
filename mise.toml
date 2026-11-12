@@ -1,36 +1,9 @@
 [tools]
 go = "1.27.3"
-protoc = "32.1"
 "github:pressly/goose" = "3.24.3"
-"go:google.golang.org/protobuf/cmd/protoc-gen-go" = "1.36.6"
-"go:connectrpc.com/connect/cmd/protoc-gen-connect-go" = "1.18.1"
 
 [env]
 _.file = ".env"
-
-[tasks.generate]
-run = [
-"""
-protoc \
-    --proto_path=proto \
-    --go_out=apps/desktop/internal/gen \
-    --go_opt=paths=source_relative \
-    --go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps/desktop/internal/gen/nprojects/v1;nprojectsv1" \
-    --connect-go_out=apps/desktop/internal/gen \
-    --connect-go_opt=paths=source_relative \
-    --connect-go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps/desktop/internal/gen/nprojects/v1;nprojectsv1" nprojects/v1/core.proto
-""",
-"""
-protoc \
-    --proto_path=proto \
-    --go_out=apps_back/server/internal/gen \
-    --go_opt=paths=source_relative \
-    --go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps_back/server/internal/gen/nprojects/v1;nprojectsv1" \
-    --connect-go_out=apps_back/server/internal/gen \
-    --connect-go_opt=paths=source_relative \
-    --connect-go_opt="Mnprojects/v1/core.proto=github.com/Pheodaron/n-projects/apps_back/server/internal/gen/nprojects/v1;nprojectsv1" nprojects/v1/core.proto
-"""
-]
 
 [tasks."compose:up"]
 run = "docker compose --env-file .env -f compose.yaml up -d --wait"
