@@ -2,47 +2,119 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
 )
 
-// AgentFactory создает или возвращает агента для витка.
-type AgentFactory func(ctx context.Context, consumed []*UserCommand) (adk.TypedAgent[*schema.AgenticMessage], error)
+type AgentFactory func(context.Context, []*UserCommand) (adk.TypedAgent[*schema.AgenticMessage], error)
 
-// HistoryStore — интерфейс БД (позже реализуется для SQLite и Postgres).
-type HistoryStore interface {
-	Load(ctx context.Context, sessionID string) ([]*schema.AgenticMessage, error)
-	Append(ctx context.Context, sessionID string, msg *schema.AgenticMessage) error
+// SaveTurn commits the messages and their outcome together. Implementations must
+// support concurrent sessions and return messages independent of stored state.
+type Store interface {
+	Load(context.Context, string) ([]*schema.AgenticMessage, error)
+	AppendUser(context.Context, string, *schema.AgenticMessage) error
+	SaveTurn(context.Context, string, TurnResult) error
 }
 
-// MemoryStore — простая In-Memory реализация на RWMutex.
+// MemoryStore publishes immutable JSON records through sync.Map. There are no
+// application mutexes, and caller mutations cannot change persisted messages.
+// Provider-specific values in Extra/Extension follow JSON round-trip semantics.
 type MemoryStore struct {
-	mu sync.RWMutex
-	db map[string][]*schema.AgenticMessage
+	sessions sync.Map // string -> *memoryHistory
 }
 
-func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{
-		db: make(map[string][]*schema.AgenticMessage),
+type memoryHistory struct {
+	messages []json.RawMessage
+	turns    []json.RawMessage
+}
+
+func NewMemoryStore() *MemoryStore { return &MemoryStore{} }
+
+func (m *MemoryStore) Load(ctx context.Context, id string) ([]*schema.AgenticMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
+	value, ok := m.sessions.Load(id)
+	if !ok {
+		return nil, nil
+	}
+	var messages []*schema.AgenticMessage
+	for _, data := range value.(*memoryHistory).messages {
+		var message schema.AgenticMessage
+		if err := json.Unmarshal(data, &message); err != nil {
+			return nil, err
+		}
+		messages = append(messages, &message)
+	}
+	return messages, nil
 }
 
-func (m *MemoryStore) Load(_ context.Context, sessionID string) ([]*schema.AgenticMessage, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	hist := m.db[sessionID]
-	cp := make([]*schema.AgenticMessage, len(hist))
-	copy(cp, hist)
-	return cp, nil
+func (m *MemoryStore) AppendUser(ctx context.Context, id string, message *schema.AgenticMessage) error {
+	data, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	return m.update(ctx, id, func(history *memoryHistory) {
+		history.messages = append(history.messages, data)
+	})
 }
 
-func (m *MemoryStore) Append(_ context.Context, sessionID string, msg *schema.AgenticMessage) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *MemoryStore) SaveTurn(ctx context.Context, id string, result TurnResult) error {
+	record, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	messages := make([]json.RawMessage, 0, len(result.Messages))
+	for _, message := range result.Messages {
+		data, err := json.Marshal(message)
+		if err != nil {
+			return err
+		}
+		messages = append(messages, data)
+	}
+	return m.update(ctx, id, func(history *memoryHistory) {
+		history.messages = append(history.messages, messages...)
+		history.turns = append(history.turns, record)
+	})
+}
 
-	m.db[sessionID] = append(m.db[sessionID], msg)
-	return nil
+// LoadTurns exposes outcomes, including partial responses, to application code.
+func (m *MemoryStore) LoadTurns(ctx context.Context, id string) ([]TurnResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	value, ok := m.sessions.Load(id)
+	if !ok {
+		return nil, nil
+	}
+	var turns []TurnResult
+	for _, record := range value.(*memoryHistory).turns {
+		var result TurnResult
+		if err := json.Unmarshal(record, &result); err != nil {
+			return nil, err
+		}
+		turns = append(turns, result)
+	}
+	return turns, nil
+}
+
+func (m *MemoryStore) update(ctx context.Context, id string, change func(*memoryHistory)) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		value, _ := m.sessions.LoadOrStore(id, &memoryHistory{})
+		previous := value.(*memoryHistory)
+		next := &memoryHistory{
+			messages: append([]json.RawMessage(nil), previous.messages...),
+			turns:    append([]json.RawMessage(nil), previous.turns...),
+		}
+		change(next)
+		if m.sessions.CompareAndSwap(id, previous, next) {
+			return nil
+		}
+	}
 }

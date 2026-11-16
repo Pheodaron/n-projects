@@ -1,5 +1,22 @@
 package agentcore
 
+import "github.com/cloudwego/eino/schema"
+
+type TurnStatus string
+
+const (
+	TurnCompleted TurnStatus = "completed"
+	TurnFailed    TurnStatus = "failed"
+	TurnCancelled TurnStatus = "cancelled"
+	TurnPreempted TurnStatus = "preempted"
+)
+
+type TurnResult struct {
+	Messages []*schema.AgenticMessage `json:"messages,omitempty"`
+	Status   TurnStatus               `json:"status"`
+	Error    string                   `json:"error,omitempty"`
+}
+
 type EventType string
 
 const (
@@ -17,10 +34,11 @@ const (
 )
 
 type Event struct {
-	SessionID string    `json:"sessionId"`
-	Type      EventType `json:"type"`
-	AgentName string    `json:"agentName,omitempty"`
-	Text      string    `json:"text,omitempty"`
+	SessionID string     `json:"sessionId"`
+	Type      EventType  `json:"type"`
+	AgentName string     `json:"agentName,omitempty"`
+	Text      string     `json:"text,omitempty"`
+	Status    TurnStatus `json:"status,omitempty"`
 }
 
 // UserCommand — сообщение или уточнение, попадающее в буфер TurnLoop.

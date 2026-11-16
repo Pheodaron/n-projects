@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/Pheodaron/n-projects/apps_back/core-prototype/pkg/agentcore"
@@ -41,10 +42,15 @@ func serverInit(bgCtx context.Context) (*agentcore.Engine, *http.ServeMux) {
 		log.Fatalf("init agent factory: %v", err)
 	}
 
+	hub := newEventHub(bgCtx)
 	engine := agentcore.NewEngine(bgCtx, agentcore.EngineConfig{
 		Factory: factory,
+		Emit:    hub.publish,
 	})
+	return engine, newMux(engine, hub)
+}
 
+func newMux(engine *agentcore.Engine, hub *eventHub) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// 1. POST /send — отправить сообщение или уточнение на ходу
@@ -54,11 +60,14 @@ func serverInit(bgCtx context.Context) (*agentcore.Engine, *http.ServeMux) {
 			Text      string `json:"text"`
 			Preempt   bool   `json:"preempt"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SessionID == "" {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.SessionID) == "" || strings.TrimSpace(req.Text) == "" {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-		engine.Send(req.SessionID, req.Text, req.Preempt)
+		if err := engine.Send(req.SessionID, req.Text, req.Preempt); err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
 		w.WriteHeader(http.StatusAccepted)
 	})
 
@@ -91,8 +100,9 @@ func serverInit(bgCtx context.Context) (*agentcore.Engine, *http.ServeMux) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 
-		ch, unsub := engine.Subscribe(sessionID)
+		ch, unsub := hub.Subscribe(sessionID)
 		defer unsub()
+		flusher.Flush()
 
 		for {
 			select {
@@ -103,11 +113,13 @@ func serverInit(bgCtx context.Context) (*agentcore.Engine, *http.ServeMux) {
 					return
 				}
 				data, _ := json.Marshal(ev)
-				fmt.Fprintf(w, "data: %s\n\n", data)
+				if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+					return
+				}
 				flusher.Flush()
 			}
 		}
 	})
 
-	return engine, mux
+	return mux
 }

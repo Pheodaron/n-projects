@@ -3,8 +3,9 @@ package agentcore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
-	"sync"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -12,251 +13,249 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+var ErrSessionClosed = errors.New("session stopped")
+
+// Session owns one TurnLoop. Callbacks read the model and persist turns;
+// emit hands events to the application independently of client connections.
 type Session struct {
 	id      string
-	bgCtx   context.Context
-	store   HistoryStore
+	store   Store
 	factory AgentFactory
-
-	loopOnce sync.Once
-	loop     atomic.Pointer[adk.TurnLoop[*UserCommand, *schema.AgenticMessage]]
-
-	cancelTurn atomic.Pointer[context.CancelFunc] // Отмена текущего витка (для кнопки Stop)
-	inFlight   atomic.Pointer[[]Event]            // Буфер текущего стрима для реконнекта
-	subs       sync.Map                           // key: chan Event, value: struct{}
+	emit    func(Event)
+	loop    *adk.TurnLoop[*UserCommand, *schema.AgenticMessage]
+	turn    atomic.Pointer[turnControl]
+	done    chan struct{}
+	exitErr error // Read only after done closes.
 }
 
-func newSession(bgCtx context.Context, id string, store HistoryStore, factory AgentFactory) *Session {
+type turnControl struct {
+	cancel  context.CancelFunc
+	stopped atomic.Bool
+}
+
+func NewSession(ctx context.Context, id string, store Store, factory AgentFactory, emit func(Event)) *Session {
 	s := &Session{
 		id:      id,
 		store:   store,
 		factory: factory,
+		emit:    emit,
+		done:    make(chan struct{}),
 	}
-
-	s.loop = adk.NewTurnLoop(s.buildLoopConfig())
-	s.loop.Run(bgCtx) // Запускается один раз; в простое спит с 0% CPU
-
+	s.loop = adk.NewTurnLoop(adk.TurnLoopConfig[*UserCommand, *schema.AgenticMessage]{
+		GenInput:      s.genInput,
+		PrepareAgent:  s.prepareAgent,
+		OnAgentEvents: s.onAgentEvents,
+	})
+	s.loop.Run(ctx)
+	go s.wait()
 	return s
 }
 
-// Send напрямую пушит команду в потокобезопасный TurnLoop.
-func (s *Session) Send(text string, preempt bool) {
-	cmd := &UserCommand{Text: text, Preempt: preempt}
-	if !preempt {
-		s.loop.Push(cmd)
-		return
+func (s *Session) Send(text string, preempt bool) error {
+	if strings.TrimSpace(text) == "" {
+		return errors.New("message must not be empty")
 	}
-
-	_, ack := s.loop.Push(cmd, adk.WithPushStrategy(
-		func(ctx context.Context, tc *adk.TurnContext[*UserCommand, *schema.AgenticMessage]) []adk.PushOption[*UserCommand, *schema.AgenticMessage] {
-			if tc == nil {
-				return nil
-			}
-			return []adk.PushOption[*UserCommand, *schema.AgenticMessage]{
-				adk.WithPreemptTimeout[*UserCommand, *schema.AgenticMessage](adk.AnySafePoint, 2*time.Second),
-			}
-		},
-	))
-	<-ack
+	select {
+	case <-s.done:
+		return ErrSessionClosed
+	default:
+	}
+	command := &UserCommand{Text: text, Preempt: preempt}
+	var options []adk.PushOption[*UserCommand, *schema.AgenticMessage]
+	if preempt {
+		options = append(options, adk.WithPreemptTimeout[*UserCommand, *schema.AgenticMessage](adk.AnySafePoint, 2*time.Second))
+	}
+	if accepted, _ := s.loop.Push(command, options...); !accepted {
+		return ErrSessionClosed
+	}
+	return nil
 }
 
-// Stop отменяет только ТЕКУЩИЙ виток генерации. Сам TurnLoop и подписчики продолжают жить!
+// Stop cancels the turn observed by this call, leaving the loop and queue alive.
 func (s *Session) Stop() {
-	if cancel := s.cancelTurn.Load(); cancel != nil {
-		(*cancel)()
+	if turn := s.turn.Load(); turn != nil {
+		turn.stopped.Store(true)
+		turn.cancel()
 	}
 }
 
-// Shutdown вызывается только при полном выходе из приложения.
 func (s *Session) Shutdown() {
 	s.Stop()
 	s.loop.Stop(adk.WithGracefulTimeout(2 * time.Second))
-	s.loop.Wait()
-
-	s.subs.Range(func(key, _ any) bool {
-		if _, loaded := s.subs.LoadAndDelete(key); loaded {
-			close(key.(chan Event))
-		}
-		return true
-	})
+	<-s.done
 }
 
-func (s *Session) buildLoopConfig() adk.TurnLoopConfig[*UserCommand, *schema.AgenticMessage] {
-	return adk.TurnLoopConfig[*UserCommand, *schema.AgenticMessage]{
-		GenInput: func(ctx context.Context, l *adk.TurnLoop[*UserCommand, *schema.AgenticMessage], items []*UserCommand) (*adk.GenInputResult[*UserCommand, *schema.AgenticMessage], error) {
-			for _, cmd := range items {
-				userMsg := schema.UserAgenticMessage(cmd.Text)
-				if err := s.store.Append(ctx, s.id, userMsg); err != nil {
-					return nil, err
-				}
-				s.emit(Event{Type: EventUserMsg, Text: cmd.Text})
-			}
+func (s *Session) Wait() error {
+	<-s.done
+	return s.exitErr
+}
 
-			history, err := s.store.Load(ctx, s.id)
-			if err != nil {
-				return nil, err
-			}
+func (s *Session) wait() {
+	s.exitErr = s.loop.Wait().ExitReason
+	s.releaseTurn(s.turn.Load())
+	if s.exitErr != nil && !isCancellation(s.exitErr) {
+		s.publish(Event{Type: EventError, Text: s.exitErr.Error()})
+	}
+	close(s.done)
+}
 
-			// Контекст конкретного витка: его можно отменить через s.Stop(), не останавливая сам TurnLoop
-			turnCtx, cancel := context.WithCancel(ctx)
-			s.cancelTurn.Store(&cancel)
-
-			return &adk.GenInputResult[*UserCommand, *schema.AgenticMessage]{
-				RunCtx: turnCtx,
-				Input: &adk.TypedAgentInput[*schema.AgenticMessage]{
-					Messages:        history,
-					EnableStreaming: true,
-				},
-				Consumed:  items,
-				Remaining: nil,
-			}, nil
-		},
-
-		PrepareAgent: func(ctx context.Context, l *adk.TurnLoop[*UserCommand, *schema.AgenticMessage], consumed []*UserCommand) (adk.TypedAgent[*schema.AgenticMessage], error) {
-			return s.factory(ctx, consumed)
-		},
-
-		OnAgentEvents: func(ctx context.Context, tc *adk.TurnContext[*UserCommand, *schema.AgenticMessage], events *adk.AsyncIterator[*adk.TypedAgentEvent[*schema.AgenticMessage]]) error {
-			s.emit(Event{Type: EventTurnStart})
-			defer func() {
-				if cancel := s.cancelTurn.Swap(nil); cancel != nil {
-					(*cancel)()
-				}
-				s.emit(Event{Type: EventTurnEnd})
-			}()
-
-			go func() {
-				select {
-				case <-tc.Preempted:
-					s.emit(Event{Type: EventTurnPreempt})
-				case <-ctx.Done():
-				}
-			}()
-
-			for {
-				ev, ok := events.Next()
-				if !ok {
-					break
-				}
-				if ev.Err != nil {
-					var cancelErr *adk.CancelError
-					if errors.As(ev.Err, &cancelErr) || errors.Is(ev.Err, context.Canceled) {
-						return nil
-					}
-					s.emit(Event{Type: EventError, Text: ev.Err.Error()})
-					return ev.Err
-				}
-
-				if ev.Output == nil || ev.Output.MessageOutput == nil {
-					continue
-				}
-				agentName := ev.AgentName
-				mo := ev.Output.MessageOutput
-
-				if mo.IsStreaming && mo.MessageStream != nil {
-					var chunks []*schema.AgenticMessage
-					for {
-						chunk, err := mo.MessageStream.Recv()
-						if errors.Is(err, io.EOF) {
-							break
-						}
-						if err != nil {
-							break
-						}
-						chunks = append(chunks, chunk)
-
-						for _, b := range chunk.ContentBlocks {
-							switch b.Type {
-							case schema.ContentBlockTypeReasoning:
-								if b.Reasoning != nil && b.Reasoning.Text != "" {
-									s.emit(Event{Type: EventThinking, AgentName: agentName, Text: b.Reasoning.Text})
-								}
-							case schema.ContentBlockTypeAssistantGenText:
-								if b.AssistantGenText != nil && b.AssistantGenText.Text != "" {
-									s.emit(Event{Type: EventText, AgentName: agentName, Text: b.AssistantGenText.Text})
-								}
-							}
-						}
-					}
-					mo.MessageStream.Close()
-
-					if len(chunks) > 0 {
-						if fullMsg, err := schema.ConcatAgenticMessages(chunks); err == nil && fullMsg != nil {
-							if err := s.store.Append(context.WithoutCancel(ctx), s.id, fullMsg); err != nil {
-								return err
-							}
-						}
-					}
-				} else if mo.Message != nil {
-					if err := s.store.Append(context.WithoutCancel(ctx), s.id, mo.Message); err != nil {
-						return err
-					}
-				}
-			}
-			return nil
-		},
+func (s *Session) releaseTurn(turn *turnControl) {
+	if turn != nil {
+		s.turn.CompareAndSwap(turn, nil)
+		turn.cancel()
 	}
 }
 
-// emit вызывается только из горутины TurnLoop (единственный писатель в inFlight).
-func (s *Session) emit(ev Event) {
-	ev.SessionID = s.id
+func (s *Session) genInput(ctx context.Context, _ *adk.TurnLoop[*UserCommand, *schema.AgenticMessage], items []*UserCommand) (*adk.GenInputResult[*UserCommand, *schema.AgenticMessage], error) {
+	turnCtx, cancel := context.WithCancel(ctx)
+	control := &turnControl{cancel: cancel}
+	s.turn.Store(control)
+	message := schema.UserAgenticMessage(items[0].Text)
+	if err := s.store.AppendUser(ctx, s.id, message); err != nil {
+		s.releaseTurn(control)
+		return nil, err
+	}
+	history, err := s.store.Load(ctx, s.id)
+	if err != nil {
+		s.releaseTurn(control)
+		return nil, err
+	}
+	s.publish(Event{Type: EventUserMsg, Text: items[0].Text})
+	return &adk.GenInputResult[*UserCommand, *schema.AgenticMessage]{
+		RunCtx: turnCtx,
+		Input: &adk.TypedAgentInput[*schema.AgenticMessage]{
+			Messages:        history,
+			EnableStreaming: true,
+		},
+		Consumed:  items[:1],
+		Remaining: items[1:],
+	}, nil
+}
 
-	switch ev.Type {
-	case EventTurnStart:
-		buf := []Event{ev}
-		s.inFlight.Store(&buf)
+func (s *Session) prepareAgent(ctx context.Context, _ *adk.TurnLoop[*UserCommand, *schema.AgenticMessage], commands []*UserCommand) (adk.TypedAgent[*schema.AgenticMessage], error) {
+	agent, err := s.factory(ctx, commands)
+	if err != nil {
+		s.releaseTurn(s.turn.Load())
+	}
+	return agent, err
+}
 
-	case EventThinking, EventText:
-		var cur []Event
-		if p := s.inFlight.Load(); p != nil {
-			cur = append(cur, (*p)...)
+func (s *Session) onAgentEvents(ctx context.Context, turn *adk.TurnContext[*UserCommand, *schema.AgenticMessage], events *adk.AsyncIterator[*adk.TypedAgentEvent[*schema.AgenticMessage]]) error {
+	control := s.turn.Load()
+	defer s.releaseTurn(control)
+	s.publish(Event{Type: EventTurnStart})
+	result := TurnResult{Status: TurnCompleted}
+	var generationErr error
+	for {
+		event, ok := events.Next()
+		if !ok {
+			break
 		}
-		n := len(cur)
-		if n > 0 && cur[n-1].Type == ev.Type && cur[n-1].AgentName == ev.AgentName {
-			cur[n-1].Text += ev.Text
-		} else {
-			cur = append(cur, ev)
+		if event == nil {
+			continue
 		}
-		s.inFlight.Store(&cur)
-
-	case EventTurnEnd:
-		s.inFlight.Store(nil)
-
+		generationErr = errors.Join(generationErr, event.Err)
+		if event.Output == nil || event.Output.MessageOutput == nil {
+			continue
+		}
+		output := event.Output.MessageOutput
+		if output.IsStreaming {
+			if output.MessageStream == nil {
+				generationErr = errors.Join(generationErr, errors.New("missing message stream"))
+				continue
+			}
+			message, err := s.readStream(event.AgentName, output.MessageStream)
+			generationErr = errors.Join(generationErr, err)
+			if message != nil {
+				result.Messages = append(result.Messages, message)
+			}
+		} else if output.Message != nil {
+			s.publishMessage(event.AgentName, output.Message)
+			result.Messages = append(result.Messages, output.Message)
+		}
+	}
+	generationErr = errors.Join(generationErr, ctx.Err())
+	if generationErr != nil {
+		result.Status, result.Error = TurnFailed, generationErr.Error()
+		if isCancellation(generationErr) {
+			result.Status = TurnCancelled
+		}
+	}
+	if control != nil && control.stopped.Load() {
+		result.Status = TurnCancelled
+	}
+	select {
+	case <-turn.Preempted:
+		result.Status = TurnPreempted
 	default:
-		if p := s.inFlight.Load(); p != nil {
-			cur := append([]Event(nil), (*p)...)
-			cur = append(cur, ev)
-			s.inFlight.Store(&cur)
-		}
 	}
 
-	s.subs.Range(func(key, _ any) bool {
-		ch := key.(chan Event)
-		select {
-		case ch <- ev:
-		default:
-		}
-		return true
-	})
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := s.store.SaveTurn(saveCtx, s.id, result); err != nil {
+		return fmt.Errorf("save turn: %w", err)
+	}
+	if result.Status == TurnFailed {
+		s.publish(Event{Type: EventError, Text: result.Error})
+	}
+	if result.Status == TurnPreempted {
+		s.publish(Event{Type: EventTurnPreempt})
+	}
+	s.publish(Event{Type: EventTurnEnd, Status: result.Status})
+	return nil
 }
 
-func (s *Session) Subscribe() (<-chan Event, func()) {
-	var snapshot []Event
-	if p := s.inFlight.Load(); p != nil {
-		snapshot = *p
-	}
-
-	ch := make(chan Event, len(snapshot)+256)
-	for _, ev := range snapshot {
-		ch <- ev
-	}
-	s.subs.Store(ch, struct{}{})
-
-	unsub := func() {
-		if _, loaded := s.subs.LoadAndDelete(ch); loaded {
-			close(ch)
+func (s *Session) readStream(agentName string, stream *schema.StreamReader[*schema.AgenticMessage]) (*schema.AgenticMessage, error) {
+	defer stream.Close()
+	var chunks []*schema.AgenticMessage
+	var streamErr error
+	for {
+		chunk, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			streamErr = err
+			break
+		}
+		if chunk != nil {
+			chunks = append(chunks, chunk)
+			s.publishMessage(agentName, chunk)
 		}
 	}
-	return ch, unsub
+	if len(chunks) == 0 {
+		return nil, streamErr
+	}
+	message, concatErr := schema.ConcatAgenticMessages(chunks)
+	return message, errors.Join(streamErr, concatErr)
+}
+
+func (s *Session) publishMessage(agentName string, message *schema.AgenticMessage) {
+	for _, block := range message.ContentBlocks {
+		if block == nil {
+			continue
+		}
+		switch block.Type {
+		case schema.ContentBlockTypeReasoning:
+			if block.Reasoning != nil && block.Reasoning.Text != "" {
+				s.publish(Event{Type: EventThinking, AgentName: agentName, Text: block.Reasoning.Text})
+			}
+		case schema.ContentBlockTypeAssistantGenText:
+			if block.AssistantGenText != nil && block.AssistantGenText.Text != "" {
+				s.publish(Event{Type: EventText, AgentName: agentName, Text: block.AssistantGenText.Text})
+			}
+		}
+	}
+}
+
+func (s *Session) publish(event Event) {
+	event.SessionID = s.id
+	if s.emit != nil {
+		s.emit(event)
+	}
+}
+
+func isCancellation(err error) bool {
+	var cancelErr *adk.CancelError
+	return errors.As(err, &cancelErr) || errors.Is(err, context.Canceled) || errors.Is(err, adk.ErrStreamCanceled)
 }
