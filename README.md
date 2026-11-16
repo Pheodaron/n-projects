@@ -129,3 +129,5 @@ mise run vet
 В Core один активный run на чат и один слот генерации. Stop отменяет run; отключение клиента не отменяет его. После рестарта незавершённые runs получают статус `interrupted`, частичный ответ сохраняется. Checkpoints, субагенты и OIDC относятся к следующим этапам.
 
 Архитектура: [ARCHITECTURE.md](docs/ARCHITECTURE.md). План: [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md).
+
+Разбор нового автономного Core, TurnLoop, SQLite/PostgreSQL и вариантов общего Go-пакета: [CORE_REVIEW.md](docs/CORE_REVIEW.md). Это предложение к следующей реализации; текущий runtime описан выше.
