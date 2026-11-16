@@ -1,0 +1,17 @@
+[tools]
+go = "1.27.3"
+
+[tasks.deps]
+run = "go mod tidy"
+
+[tasks.fmt]
+run = "gofmt -w cmd pkg"
+
+[tasks.test]
+run = "go test -race ./..."
+
+[tasks.vet]
+run = "go vet ./..."
+
+[tasks.build]
+run = "docker build -t n-projects-core-prototype:local ."
