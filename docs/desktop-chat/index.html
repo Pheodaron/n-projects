@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>n-projects · Эскиз desktop</title>
+<style>
+:root{color-scheme:light;--ink:#1d2929;--muted:#586b68;--line:#dce3dd;--teal:#176855;--side:#162d2c;--paper:#f9faf6;--sans:"Inter","Segoe UI",Arial,sans-serif;--mono:"IBM Plex Mono",Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:#e9ede7;color:var(--ink);font:15px/1.55 var(--sans)}
+main{width:min(1280px,100%);margin:auto;padding:22px clamp(12px,3vw,44px)}
+.choice{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden}
+.preview{display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.preview strong{font-size:14px}.tabs{display:inline-flex;gap:3px;flex-wrap:wrap}
+.tabs label{padding:5px 12px;font-size:13px;border:1px solid transparent;border-radius:18px;cursor:pointer;color:#425950}
+#history:checked~.preview [for=history],#new:checked~.preview [for=new],#stream:checked~.preview [for=stream],#idle-draft:checked~.preview [for=idle-draft],#busy-draft:checked~.preview [for=busy-draft],#queued:checked~.preview [for=queued],#interrupt:checked~.preview [for=interrupt],#offline:checked~.preview [for=offline]{background:#fff;color:#1c3e34;border-color:#b8c9bf}
+#history:focus-visible~.preview [for=history],#new:focus-visible~.preview [for=new],#stream:focus-visible~.preview [for=stream],#idle-draft:focus-visible~.preview [for=idle-draft],#busy-draft:focus-visible~.preview [for=busy-draft],#queued:focus-visible~.preview [for=queued],#interrupt:focus-visible~.preview [for=interrupt],#offline:focus-visible~.preview [for=offline],summary:focus-visible{outline:2px solid #16775d;outline-offset:2px}
+.window{display:grid;grid-template-columns:240px minmax(0,1fr);height:clamp(410px,85vh,760px);background:var(--paper);border:1px solid #c9d2c9;border-radius:16px;overflow:hidden;box-shadow:0 18px 54px -32px #283e35}
+aside{background:var(--side);color:#e9f3ea;padding:24px 16px 16px;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:10px;font-size:21px;font-weight:650;letter-spacing:-1px}
+.logo{display:inline-grid;place-items:center;width:34px;height:34px;color:#153730;background:#c7e88e;clip-path:polygon(24% 0,100% 0,100% 76%,76% 100%,0 100%,0 24%);font:bold 22px var(--mono)}
+.newchat{margin:32px 0 25px;display:block;text-align:center;background:#c7e88e;color:#173b2c;border-radius:7px;padding:8px 12px;font-weight:650;cursor:pointer}
+.sidehead{font:11px var(--mono);letter-spacing:1.3px;text-transform:uppercase}
+.sidehead{color:#aac1b9;padding:0 10px;margin-bottom:10px}
+.thread{display:block;padding:11px 13px;color:#c1d0c9;font-size:14px;border-radius:6px}
+.thread.active{cursor:pointer;color:#fff;background:#2c4540;box-shadow:inset 3px 0 #c7e88e}
+.thread small{display:block;font-size:11px;color:#bdcec6}
+.chat{display:flex;flex-direction:column;min-width:0}
+header{padding:14px clamp(16px,3vw,38px);border-bottom:1px solid var(--line)}
+.content,footer{width:min(100%,770px);margin-inline:auto;padding-inline:clamp(18px,4vw,56px)}
+.content{padding-block:29px 20px;flex:1;min-height:0;overflow-y:auto}
+#chat-title,#edit-title{margin:0;font-family:var(--sans);font-size:clamp(20px,2vw,26px);line-height:1.25;letter-spacing:-.03em;font-weight:630;color:var(--ink)}
+#chat-title{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.person{background:#eaf0e6;padding:12px 17px;border-radius:13px 13px 3px 13px;width:fit-content;max-width:88%;margin:0 0 22px auto}
+.who{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:650}
+.who .logo{width:24px;height:24px;font:700 16px var(--mono)}
+time{font:11px var(--mono);color:var(--muted);margin-left:4px}
+.answer{margin:10px 0 12px}.answer p{margin:8px 0}.answer ul{padding-left:20px;margin:8px 0}
+details{max-width:100%;border:1px solid #d0dcd2;border-radius:8px;background:#f1f5ee;margin:11px 0 15px}
+summary{cursor:pointer;padding:8px 12px;font-size:13px;color:#305d4e}
+code{font:12px var(--mono)}details p{font-size:13px;margin:0;padding:4px 13px 10px;overflow-wrap:anywhere}
+footer{padding-bottom:22px}
+.composer{border:1px solid #c5d1c8;border-radius:11px;padding:13px 14px;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:10px;color:#61716b;box-shadow:0 2px 4px #15332b08}
+.send,.retry{display:inline-grid;place-items:center;border-radius:7px;background:var(--teal);color:white;cursor:pointer}
+.send{width:32px;height:32px;font-size:20px;flex-shrink:0}.retry{padding:8px 14px;font-size:14px}
+.empty,.warning{margin-block:32px;padding:24px;border:1px dashed #b8c9bb;border-radius:10px}.warning{background:#fff5e6;border:1px solid #e5ccab}
+.empty h2,.warning h2{font-size:19px;margin:0}.empty p,.warning p{margin:6px 0 13px}
+.caret{display:inline-block;width:7px;height:1em;background:var(--teal);vertical-align:-2px}
+.scene{display:none}
+[data-view=history]:checked~.window .history,[data-view=stream]:checked~.window .stream,#history:checked~.window .history,#new:checked~.window .new,#stream:checked~.window .stream,#offline:checked~.window .offline{display:block}
+#offline:checked~.window footer{display:none}
+@media(max-width:760px){.window{grid-template-columns:174px minmax(0,1fr)}aside{padding:19px 10px}.thread{font-size:13px}.person{max-width:94%}.content{padding-top:24px}}
+@media(max-width:590px){main{padding:10px 7px}.preview{gap:4px;margin-bottom:9px}.tabs label{padding:4px 7px}.window{display:flex;flex-direction:column}.brand{font-size:17px}.logo{width:26px;height:26px;font-size:18px}aside{flex-direction:row;align-items:center;justify-content:space-between;padding:10px 16px}.newchat{margin:0;padding:5px 10px;font-size:13px}.sidehead{display:none}.chat{flex:1}.content{padding-block:20px}header{padding-block:9px}.person{margin-bottom:14px}}
+[hidden]{display:none!important}
+.composer input{flex:1;min-width:0;font:inherit;color:var(--ink);border:0;background:transparent}
+.composer:focus-within{outline:2px solid #91b4a5;outline-offset:2px}
+.composer input:focus{outline:0}
+.composer button{border:0;font-family:var(--sans)}
+.composer button:focus-visible,.advance:focus-visible{outline:2px solid var(--teal);outline-offset:3px}
+.composer button:disabled{opacity:.45;cursor:default}
+#stop{background:#263c39}.stop-square{width:11px;height:11px;background:currentColor;border-radius:2px}
+#submit[data-mode=queue]{background:#edf2ec;color:#34574d}
+.clock{width:17px;height:17px;border:1.6px solid currentColor;border-radius:50%;position:relative}
+.clock::after{content:"";position:absolute;top:3px;left:6px;width:4px;height:5px;border-left:1.5px solid;border-bottom:1.5px solid}
+.person{overflow-wrap:anywhere;white-space:pre-wrap}
+.person.pending{color:#60706a;background:#f0f2ed;border:1px dashed #c4cec5}
+.advance{font:13px var(--sans);background:transparent;border:0;border-bottom:1px dashed #839a8c;padding:3px;color:#365e4f;cursor:pointer}
+.hint{margin:6px 0 0;color:var(--muted);font-size:12px;text-align:center}
+.hint[aria-hidden="true"]{visibility:hidden}
+.activity{background:#fff;border-color:var(--line);border-radius:11px}
+.activity>summary{display:flex;align-items:center;gap:9px;padding:11px 13px;font-weight:650;list-style:none}
+.activity>summary::-webkit-details-marker{display:none}
+.spark{color:var(--teal);font-size:17px;line-height:1}
+.chevron{margin-left:auto;width:8px;height:8px;border-right:1.5px solid;border-bottom:1.5px solid;transform:rotate(45deg)}
+.activity[open]>summary .chevron{transform:rotate(225deg)}
+.steps{display:grid;gap:6px;margin:0;padding:0 10px 10px;list-style:none}
+.steps li{border:1px solid #d0dcd2;border-radius:8px;background:#f1f5ee}
+.thought{padding:8px 12px}
+.thought p{padding:0}
+.phase{color:#656565;font-weight:400}
+.phase:empty{display:none}
+@supports (background-clip:text){
+  .phase{background:linear-gradient(105deg,#595959 25%,#999 48%,#595959 70%) 100% 0/240% 100%;background-clip:text;color:transparent;animation:shimmer 2s linear infinite}
+}
+@keyframes shimmer{to{background-position:-75% 0}}
+.phase.thinking::after{content:"...";display:inline-block;color:#747474;animation:thought-dots 1.6s step-end infinite}
+@keyframes thought-dots{0%{clip-path:inset(0 100% 0 0)}25%{clip-path:inset(0 66.66% 0 0)}50%{clip-path:inset(0 33.33% 0 0)}75%,100%{clip-path:inset(0)}}
+@media(prefers-reduced-motion:reduce){.phase,.phase.thinking::after{animation:none}.phase{color:#656565;background:none}}
+@media(forced-colors:active){.phase,.phase.thinking::after{color:CanvasText}}
+.steps .tool{margin:0;border:0;background:transparent}
+aside,.chat{min-height:0}
+.newchat{font-family:inherit;border:0}
+#thread-list{overflow-y:auto;min-height:0;flex:1;overscroll-behavior:contain;scrollbar-width:thin}
+#thread-list .thread{width:100%;text-align:left;font-family:inherit;background:transparent;border:0;cursor:pointer;overflow-wrap:anywhere}
+#thread-list .active{background:#2c4540}
+#thread-list .thread:hover{background:#253e3b}
+@media(max-width:590px){aside{flex-wrap:wrap;gap:5px}#thread-list{flex:0 0 100%;height:90px}#thread-list .thread{padding:4px 10px}.window{height:auto}.content{max-height:55vh}}
+.title-line,.title-editor{display:flex;align-items:center;gap:8px;max-width:100%;min-height:34px}
+.title-line{width:fit-content}
+header button{border:0;border-radius:6px;padding:5px 9px;background:#eaf0e6;color:var(--teal);cursor:pointer;font:inherit}
+#rename{opacity:0;flex:none}
+.title-line:hover #rename,.title-line:focus-within #rename{opacity:1}
+@media(hover:none){#rename{opacity:1}}
+.title-editor{position:relative;border-radius:6px;background:#fff;outline:1px solid var(--line);gap:2px;--title-inset:6px;margin-inline-start:calc(-1 * var(--title-inset));padding-inline:var(--title-inset) 3px}
+.title-editor:focus-within{outline-color:var(--teal)}
+#edit-title{min-width:0;flex:1;padding:0;border:0;background:transparent;outline:0}
+.title-editor button{display:grid;place-items:center;flex:0 0 28px;height:28px;padding:0;background:transparent;color:var(--muted)}
+.title-editor button[type=submit]{color:var(--teal)}
+.title-editor button:not(:disabled):hover,.title-editor button:focus-visible{background:#eaf0e6}
+.title-editor svg{width:18px;height:18px;display:block}
+.title-editor path{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.title-editor button:disabled{opacity:.45;cursor:default}
+</style>
+</head>
+<body>
+<main>
+<input class="choice" type="radio" name="scene" id="history" checked>
+<input class="choice" type="radio" name="scene" id="new">
+<input class="choice" type="radio" name="scene" id="stream">
+<input class="choice" type="radio" name="scene" id="idle-draft" data-view="history" data-message="draft">
+<input class="choice" type="radio" name="scene" id="busy-draft" data-view="stream" data-message="draft">
+<input class="choice" type="radio" name="scene" id="queued" data-view="stream" data-message="queued">
+<input class="choice" type="radio" name="scene" id="interrupt" data-view="stream" data-message="draft">
+<input class="choice" type="radio" name="scene" id="offline">
+<div class="preview"><strong>Сценарии макета</strong><div class="tabs"><label for="history">История</label><label for="new">Новый чат</label><label for="stream">Ответ агента</label><label for="idle-draft">Черновик</label><label for="busy-draft">Ввод во время ответа</label><label for="queued">Сообщение в очереди</label><label for="interrupt">Зажат Ctrl</label><label for="offline">Нет связи с БД</label></div><button type="button" class="advance" id="advance" hidden>Завершить ход в макете →</button></div>
+<div class="window">
+<aside>
+<div class="brand"><span class="logo" aria-hidden="true">n</span>n-projects</div>
+<button type="button" class="newchat">＋ Новый чат</button>
+<div class="sidehead">Чаты</div>
+<nav id="thread-list" aria-label="Список чатов" tabindex="0"></nav>
+</aside>
+<section class="chat">
+<header>
+  <div class="title-line"><h1 id="chat-title">Структура проекта</h1>
+    <button type="button" id="rename" title="Переименовать чат" aria-label="Переименовать чат">✎</button>
+  </div>
+  <form class="title-editor" hidden>
+    <input id="edit-title" aria-label="Новое название чата" autocomplete="off" required>
+    <button type="submit" aria-label="Сохранить название" title="Сохранить название"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg></button>
+    <button type="button" id="cancel-rename" aria-label="Отменить переименование" title="Отменить переименование"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </form>
+</header>
+<div class="content">
+<div class="scene history">
+<p class="person">Посмотри README. Где в проекте живёт агент и как desktop получает историю чата?</p>
+<div class="who"><span class="logo" aria-hidden="true">n</span>Агент <time>11:42</time></div>
+<details class="activity">
+  <summary><span class="spark" aria-hidden="true">✦</span>Ход работы<span class="phase"></span><span class="chevron" aria-hidden="true"></span></summary>
+  <ol class="steps">
+    <li class="thought"><p>Найду в README, где запускается агент и как окно чата получает историю.</p></li>
+    <li><details class="tool"><summary><code>read_file</code> · README.md</summary><p><b>Вызов</b> <code>{"path":"README.md"}</code></p><p class="result"><b>Результат</b> · Найден раздел о подключении через Wails.</p></details></li>
+    <li class="thought"><p>Сверю описание с методом History в Wails-адаптере.</p></li>
+    <li><details class="tool"><summary><code>read_file</code> · service.go</summary><p><b>Вызов</b> <code>{"path":"adapters/wailsagent/service.go"}</code></p><p class="result"><b>Результат</b> · Метод History передаёт запрос движку.</p></details></li>
+  </ol>
+</details>
+<div class="answer"><p>Ядро находится в <code>agentcore/</code>. В desktop оно работает на компьютере пользователя.</p><p>Когда вы открываете чат, окно вызывает <code>History</code> через Wails. Агент читает сообщения из PostgreSQL и возвращает текст, вызовы инструментов и их результаты в порядке записи.</p></div>
+</div>
+<div class="scene new"><div class="empty"><h2>С чего начнём?</h2><p>Задайте вопрос агенту или выберите пример.</p><label class="retry" for="stream">Разобрать структуру проекта ↗</label></div></div>
+<div class="scene stream" id="sample">
+<p class="person">Посмотри README. Где в проекте живёт агент и как desktop получает историю чата?</p>
+<div class="who"><span class="logo" aria-hidden="true">n</span>Агент <time>пишет…</time></div>
+<div class="activity-slot"></div>
+<p class="answer">Ядро находится в <code>agentcore/</code>. В desktop оно работает на компьютере пользователя.<span class="caret"></span></p>
+</div>
+<div class="scene offline"><div class="warning"><h2>Не удалось загрузить историю</h2><p>Приложение потеряло связь с PostgreSQL. Проверьте подключение к сети или VPN и попробуйте ещё раз.</p><label for="history" class="retry">Повторить подключение</label></div></div>
+<div id="turns"></div>
+<div id="waiting" aria-live="polite"></div>
+</div>
+<footer>
+<form class="composer">
+  <input id="draft" aria-label="Сообщение агенту" placeholder="Сообщение агенту…" autocomplete="off">
+  <button type="submit" id="submit" class="send" aria-label="Отправить сообщение" disabled>↑</button>
+  <button type="button" id="stop" class="send" aria-label="Остановить генерацию" title="Остановить генерацию" hidden><span class="stop-square" aria-hidden="true"></span></button>
+</form>
+<p class="hint" aria-hidden="true">Ctrl - перебить</p>
+</footer>
+</section>
+</div>
+</main>
+<script>
+const $ = selector => document.querySelector(selector);
+const draft = $('#draft'), send = $('#submit'), turns = $('#turns'), waiting = $('#waiting');
+const sample = $('#sample');
+const liveActivity = $('.history .activity').cloneNode(true);
+liveActivity.open = true;
+sample.querySelector('.activity-slot').replaceWith(liveActivity);
+const sampleMarkup = sample.innerHTML;
+let active = null;
+let ctrl = false;
+let previewCtrl = false;
+
+// The preview pages through the initial list. Subsequent user messages update its head.
+const pageSize = 15;
+const topics = ['API', 'Миграции', 'Сборка', 'Интерфейс', 'Релиз', 'Документация'];
+const sections = ['чаты', 'история', 'поиск', 'файлы', 'инструменты', 'хранилище', 'настройки'];
+const firstTitles = ['Структура проекта', 'Подготовка к релизу', 'Документы команды'];
+const initialChats = Array.from({length: 32}, (_, i) => {
+  const title = firstTitles[i] ?? topics[i % topics.length] + ' · ' + sections[Math.floor(i / topics.length) % sections.length];
+  const date = new Date(Date.now() - i * 3600000);
+  return {id: 'chat-' + i, title, date, messages: i === 0 ? [] : ['Обсудим ' + title + '.']};
+});
+const list = $('#thread-list');
+const rows = new Map();
+let nextPage = 1;
+let currentChat = initialChats[0];
+let newChatNumber = 0;
+
+const titleEditor = $('.title-editor');
+const titleInput = $('#edit-title');
+const renameButton = $('#rename');
+
+function closeEditor() {
+  titleEditor.hidden = true;
+  $('.title-line').hidden = false;
+}
+
+renameButton.onclick = () => {
+  if (!currentChat) return;
+  titleInput.value = currentChat.title;
+  titleEditor.querySelector('[type=submit]').disabled = false;
+  $('.title-line').hidden = true;
+  titleEditor.hidden = false;
+  titleInput.focus();
+  titleInput.select();
+};
+titleInput.oninput = () => {
+  titleEditor.querySelector('[type=submit]').disabled = !titleInput.value.trim();
+};
+titleEditor.onsubmit = event => {
+  event.preventDefault();
+  const title = titleInput.value.trim();
+  if (!title || !currentChat) return;
+  currentChat.title = title;
+  $('#chat-title').textContent = title;
+  rows.get(currentChat.id).firstChild.textContent = title;
+  closeEditor();
+  renameButton.focus();
+};
+$('#cancel-rename').onclick = () => {
+  closeEditor();
+  renameButton.focus();
+};
+titleEditor.onkeydown = event => {
+  if (event.key === 'Escape') $('#cancel-rename').click();
+};
+
+function selectChat(chat) {
+  if (chat !== currentChat) closeEditor();
+  renameButton.hidden = !chat || $('#offline').checked;
+  currentChat = chat;
+  $('#chat-title').textContent = chat?.title ?? 'Новый чат';
+  list.querySelector('.active')?.classList.remove('active');
+  rows.get(chat?.id)?.classList.add('active');
+}
+
+function rowFor(chat) {
+  let row = rows.get(chat.id);
+  if (!row) {
+    row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'thread';
+    row.append(document.createTextNode(chat.title), document.createElement('small'));
+    row.onclick = () => {
+      $('#history').checked = true;
+      resetScene(chat);
+    };
+    rows.set(chat.id, row);
+  }
+  row.lastElementChild.textContent = chat.date.toLocaleString('ru-RU', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+  });
+  return row;
+}
+
+function loadPage() {
+  const offset = (nextPage - 1) * pageSize;
+  const page = initialChats.slice(offset, offset + pageSize);
+  if (!page.length) {
+    list.removeEventListener('scroll', onListScroll);
+    return;
+  }
+  nextPage++;
+  for (const chat of page) {
+    if (!rows.has(chat.id)) list.append(rowFor(chat));
+  }
+}
+
+function onListScroll() {
+  if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) loadPage();
+}
+
+document.addEventListener('chat:user-message', ({detail: {chat, text}}) => {
+  chat.messages.push(text);
+  chat.date = new Date();
+  list.prepend(rowFor(chat));
+  selectChat(chat);
+  list.scrollTop = 0;
+});
+list.addEventListener('scroll', onListScroll);
+loadPage();
+
+let phaseTimer;
+
+function showSteps(turn) {
+  clearTimeout(phaseTimer);
+  const steps = [...turn.querySelectorAll('.steps > li')];
+  const phase = turn.querySelector('.phase');
+  const answer = turn.querySelector('.answer');
+  function show(index) {
+    steps.forEach((step, i) => {
+      step.hidden = i > index;
+      const result = step.querySelector('.result');
+      if (result) result.hidden = i >= index;
+    });
+    const step = steps[index];
+    const tool = step?.querySelector('.tool summary code');
+    phase.textContent = step ? (tool?.textContent || 'Думаю') : '';
+    phase.classList.toggle('thinking', Boolean(step && !tool));
+    answer.hidden = Boolean(step);
+    if (step) phaseTimer = setTimeout(() => show(index + 1), 3200);
+  }
+  show(0);
+}
+
+function controls() {
+  const hasText = Boolean(draft.value.trim());
+  const interrupt = ctrl || previewCtrl;
+  const queue = active && !interrupt;
+  const label = active ? (interrupt ? 'Отправить с перебитием' : 'Отправить в очередь') : 'Отправить сообщение';
+  send.dataset.mode = queue ? 'queue' : 'send';
+  send.innerHTML = queue ? '<span class="clock" aria-hidden="true"></span>' : (active ? '↯' : '↑');
+  send.title = label;
+  send.setAttribute('aria-label', label);
+  send.hidden = Boolean(active) && !hasText;
+  send.disabled = !hasText;
+  $('#stop').hidden = !active;
+  $('#advance').hidden = !active;
+  $('.hint').setAttribute('aria-hidden', String(!active || !hasText));
+}
+
+function bubble(text) {
+  const item = document.createElement('p');
+  item.className = 'person';
+  item.textContent = text;
+  return item;
+}
+
+function enqueue(item) {
+  item.classList.add('pending');
+  waiting.append(item);
+}
+
+function start(item) {
+  const text = item.textContent;
+  const chat = currentChat ?? {
+    id: 'new-' + ++newChatNumber, title: Array.from(text).slice(0, 60).join(''), messages: []
+  };
+  document.dispatchEvent(new CustomEvent('chat:user-message', {detail: {chat, text}}));
+  item.classList.remove('pending');
+  turns.append(item);
+  active = document.createElement('div');
+  active.innerHTML = '<div class="who"><span class="logo" aria-hidden="true">n</span>Агент <time>пишет…</time></div><p class="answer">Готовлю ответ…<span class="caret"></span></p>';
+  const activity = liveActivity.cloneNode(true);
+  const steps = activity.querySelector('.steps');
+  steps.replaceChildren(steps.firstElementChild);
+  steps.querySelector('p').textContent = 'Готовлю ответ на сообщение.';
+  active.querySelector('.answer').before(activity);
+  turns.append(active);
+  showSteps(active);
+  $('.scene.new .empty').hidden = true;
+}
+
+function finish(status) {
+  if (!active) return;
+  clearTimeout(phaseTimer);
+  const phase = active.querySelector('.phase');
+  phase.textContent = '';
+  phase.classList.remove('thinking');
+  if (status === 'готово') {
+    active.querySelectorAll('.steps [hidden], .answer[hidden]').forEach(item => item.hidden = false);
+  }
+  active.querySelector('time').textContent = status;
+  active.querySelector('.caret')?.remove();
+  if (active !== sample) {
+    active.querySelector('.answer').textContent = status === 'готово' ? 'Это пример завершённого ответа агента.' : '…';
+  }
+  active = null;
+  previewCtrl = false;
+}
+
+function next(status) {
+  finish(status);
+  if (waiting.firstElementChild) start(waiting.firstElementChild);
+  controls();
+}
+
+function submitMessage(interrupt) {
+  const text = draft.value.trim();
+  if (!text) return;
+  const item = bubble(text);
+  if (active && !interrupt) {
+    enqueue(item);
+  } else {
+    finish('ответ перебит');
+    start(item);
+  }
+  draft.value = '';
+  draft.focus();
+  controls();
+}
+
+$('#stop').onclick = () => next('остановлено');
+$('#advance').onclick = () => next('готово');
+$('.composer').onsubmit = event => {
+  event.preventDefault();
+  submitMessage(ctrl || previewCtrl);
+};
+draft.oninput = controls;
+draft.onkeydown = event => {
+  if (event.key === 'Enter' && !event.isComposing) {
+    event.preventDefault();
+    submitMessage(event.ctrlKey || previewCtrl);
+  }
+};
+function setCtrl(value) {
+  if (ctrl !== value) { ctrl = value; controls(); }
+}
+window.addEventListener('keydown', event => setCtrl(event.ctrlKey));
+window.addEventListener('keyup', event => setCtrl(event.ctrlKey));
+window.addEventListener('blur', () => setCtrl(false));
+function resetScene(chat) {
+  closeEditor();
+  clearTimeout(phaseTimer);
+  sample.innerHTML = sampleMarkup;
+  turns.replaceChildren();
+  waiting.replaceChildren();
+  const choice = $('.choice:checked');
+  selectChat(chat ?? (choice.id === 'new' ? null : initialChats[0]));
+  $('.history').hidden = currentChat !== initialChats[0];
+  if (choice.id === 'history' && currentChat) {
+    for (const text of currentChat.messages) turns.append(bubble(text));
+  }
+  $('.content').scrollTop = 0;
+  const example = 'Покажи, какие пакеты участвуют в загрузке истории.';
+  draft.value = choice.dataset.message === 'draft' ? example : '';
+  if (choice.dataset.message === 'queued') enqueue(bubble(example));
+  previewCtrl = choice.id === 'interrupt';
+  $('.scene.new .empty').hidden = false;
+  active = (choice.dataset.view || choice.id) === 'stream' ? sample : null;
+  if (active) showSteps(active);
+  controls();
+}
+document.querySelectorAll('.choice').forEach(choice => choice.onchange = () => resetScene());
+$('.newchat').onclick = () => {
+  $('#new').checked = true;
+  resetScene();
+  draft.focus();
+};
+resetScene();
+</script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+[tools]
+go = "latest"
+"aqua:pressly/goose" = "3.30.1"
+protoc = "30.2"
+"go:google.golang.org/protobuf/cmd/protoc-gen-go" = "v1.36.6"
+"go:connectrpc.com/connect/cmd/protoc-gen-connect-go" = "v1.21.0"
+
+[env]
+GOOSE_DRIVER = "postgres"
+GOOSE_MIGRATION_DIR = "migrations"
+GOOSE_DBSTRING = "{{ env.GOOSE_DBSTRING | default(value='postgres://agentcore@127.0.0.1/agentcore?sslmode=disable') }}"
+_.file = { path = ".env", redact = true }
+
+[tasks."compose:up"]
+description = "Start PostgreSQL and wait for readiness"
+run = "docker compose up -d --wait"
+
+[tasks."compose:down"]
+description = "Stop Compose and keep the PostgreSQL data volume"
+run = "docker compose down"
+
+[tasks."compose:ps"]
+description = "Show Compose service status"
+run = "docker compose ps --all"
+
+[tasks."compose:logs"]
+description = "Follow PostgreSQL logs"
+run = "docker compose logs --follow --tail=100 postgres"
+
+[tasks."migrate:status"]
+description = "Show migration status"
+run = "goose status"
+
+[tasks."migrate:up"]
+description = "Apply pending database migrations"
+run = "goose up"
+
+[tasks."migrate:down"]
+description = "Roll back the last database migration"
+run = "goose down"
+
+[tasks."migrate:create"]
+description = "Create the next numbered SQL migration"
+usage = 'arg "<name>" help="Migration name, for example add_chat_title"'
+run = 'goose -s create "$usage_name" sql'
+
+[tasks."proto:generate"]
+description = "Generate Go messages and ConnectRPC bindings from agent.proto"
+dir = "{{config_root}}"
+run = "protoc -I . --go_out=. --go_opt=paths=source_relative --connect-go_out=. --connect-go_opt=paths=source_relative,simple proto/agent/v1/agent.proto"
